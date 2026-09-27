@@ -2,18 +2,21 @@ import os
 import requests
 import pandas as pd
 import numpy as np
+import ccxt
 
 # Configuración de pares y parámetros
-SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT", "AVAXUSDT", "NEARUSDT", "LINKUSDT", "SUIUSDT"]
-INTERVAL = "15m"
-LIMIT = 300  # 300 velas para cálculo correcto de EMA 200 y métricas
+SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT", "AVAX/USDT", "NEAR/USDT", "LINK/USDT", "SUI/USDT"]
+TIMEFRAME = "15m"
+LIMIT = 300
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-}
+# Inicializar cliente de Binance
+exchange = ccxt.binance({
+    'enableRateLimit': True,
+    'options': {'defaultType': 'spot'}
+})
 
 def enviar_telegram(mensaje):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -27,18 +30,12 @@ def enviar_telegram(mensaje):
         print(f"Error enviando mensaje a Telegram: {e}")
 
 def obtener_datos(symbol):
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={INTERVAL}&limit={LIMIT}"
     try:
-        res = requests.get(url, headers=HEADERS, timeout=10)
-        data = res.json()
-        if not isinstance(data, list) or len(data) < 200:
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=LIMIT)
+        if not ohlcv or len(ohlcv) < 200:
             return None
         
-        df = pd.DataFrame(data, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume',
-            'close_time', 'quote_volume', 'trades', 'taker_buy_base', 'taker_buy_quote', 'ignore'
-        ])
-        
+        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         cols = ['open', 'high', 'low', 'close', 'volume']
         df[cols] = df[cols].astype(float)
         return df
@@ -79,9 +76,7 @@ def analizar_activo(symbol):
         print(f"❌ Datos insuficientes tras cálculo para {symbol}")
         return
 
-    # Última vela cerrada
     last = df.iloc[-1]
-    
     precio = last['close']
     ema = last['ema200']
     rsi = last['rsi']
@@ -91,7 +86,6 @@ def analizar_activo(symbol):
     puntos = 0
     detalles = []
 
-    # Estrategia de Confluencia Alcista
     if precio > ema:
         puntos += 35
         detalles.append("Tendencia Alcista (Precio > EMA 200)")
@@ -104,7 +98,6 @@ def analizar_activo(symbol):
         puntos += 30
         detalles.append("Cruce MACD Alcista")
 
-    # Si alcanza 70% o más de confluencia, envía señal
     if puntos >= 70:
         msg = f"🚀 *SEÑAL ALCISTA DETECTADA*\n\n" \
               f"📌 *Activo:* `{symbol}`\n" \
