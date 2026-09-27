@@ -1,4 +1,4 @@
-requests
 pandas
-google-genai
-schedule
+numpy
+requests
+ccxt
