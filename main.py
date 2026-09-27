@@ -12,7 +12,7 @@ LIMIT = 300
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# Inicializar cliente de KuCoin
+# Inicializar cliente de KuCoin (Libre de geobloqueos)
 exchange = ccxt.kucoin({
     'enableRateLimit': True
 })
@@ -57,75 +57,6 @@ def calcular_indicadores(df):
     df['rsi'] = 100 - (100 / (1 + rs))
     
     # MACD (12, 26, 9)
-    exp1 = df['close'].ewm(span=12, adjust=False).mean()
-    exp2 = df['close'].ewm(span¡Excelente diseño! Este formato profesional incluye datos técnicos más avanzados como **ATR (Average True Range)** para calcular automáticamente el Stop Loss y Take Profits adaptativos, así como las métricas exactas de **RSI, MACD, EMA 200 y Volumen**.
-
----
-
-### Código actualizado para `main.py`
-
-Edita tu archivo **`main.py`** en GitHub y reemplaza todo su contenido con este código:
-
-```python
-import os
-import requests
-import pandas as pd
-import numpy as np
-import ccxt
-
-# Configuración de pares y parámetros
-SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT", "AVAX/USDT", "NEAR/USDT", "LINK/USDT", "SUI/USDT"]
-TIMEFRAME = "15m"
-LIMIT = 300
-
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-# Inicializar cliente de KuCoin (Libre de geobloqueos)
-exchange = ccxt.kucoin({
-    'enableRateLimit': True
-})
-
-def enviar_telegram(mensaje):
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("⚠️ Variables de Telegram no configuradas.")
-        return
-    url = f"[https://api.telegram.org/bot](https://api.telegram.org/bot){TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
-    try:
-        requests.post(url, json=payload, timeout=10)
-    except Exception as e:
-        print(f"Error enviando mensaje a Telegram: {e}")
-
-def obtener_datos(symbol):
-    try:
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=LIMIT)
-        if not ohlcv or len(ohlcv) < 200:
-            return None
-        
-        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        cols = ['open', 'high', 'low', 'close', 'volume']
-        df[cols] = df[cols].astype(float)
-        return df
-    except Exception as e:
-        print(f"Error obteniendo datos de {symbol}: {e}")
-        return None
-
-def calcular_indicadores(df):
-    if df is None or len(df) < 200:
-        return None
-    
-    # EMA 200
-    df['ema200'] = df['close'].ewm(span=200, adjust=False).mean()
-    
-    # RSI (14)
-    delta = df['close'].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / (loss + 1e-10)
-    df['rsi'] = 100 - (100 / (1 + rs))
-    
-    # MACD
     exp1 = df['close'].ewm(span=12, adjust=False).mean()
     exp2 = df['close'].ewm(span=26, adjust=False).mean()
     df['macd'] = exp1 - exp2
