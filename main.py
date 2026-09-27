@@ -1,9 +1,15 @@
 import os
+# Forzar la zona horaria a España a nivel de sistema del script antes de cualquier importación de fecha
+os.environ['TZ'] = 'Europe/Madrid'
+import time
+if hasattr(time, 'tzset'):
+    time.tzset()
+
 import requests
 import pandas as pd
 import numpy as np
 import ccxt
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 
 # Configuración de pares y parámetros
 SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT", "AVAX/USDT", "NEAR/USDT", "LINK/USDT", "SUI/USDT"]
@@ -17,12 +23,6 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 exchange = ccxt.kucoin({
     'enableRateLimit': True
 })
-
-def obtener_hora_espana():
-    # Obtener UTC actual del sistema y sumar +2 horas (CEST - Horario de Verano España)
-    utc_now = datetime.now(timezone.utc)
-    espana_now = utc_now + timedelta(hours=2)
-    return espana_now.hour, espana_now.strftime("%H:%M")
 
 def enviar_telegram(mensaje):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -163,14 +163,17 @@ def analizar_activo(symbol):
         print(f"ℹ️ {symbol}: Confluencia del {puntos}% (Sin señal).")
 
 def main():
-    hora_num, hora_str = obtener_hora_espana()
+    ahora = datetime.now()
+    hora_actual = ahora.hour
     
-    # Bloqueo estricto de 00:00 a 07:59 (Hora España)
-    if 0 <= hora_num < 8:
-        print(f"🔕 Modo Silencioso Activo. Hora España: {hora_str}hs. Notificaciones a Telegram suspendidas.")
+    print(f"🕒 Hora local detectada en el servidor: {ahora.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Bloqueo estricto de 00:00 a 07:59 (Hora España gracias al TZ forzado)
+    if 0 <= hora_actual < 8:
+        print(f"🔕 Modo Silencioso Activo ({hora_actual}:00h). Notificaciones a Telegram bloqueadas.")
         return
 
-    print(f"🔍 Escaneando 10 activos (15m)... [Hora España: {hora_str}hs]")
+    print("🔍 Escaneando 10 activos (15m)...")
     for symbol in SYMBOLS:
         analizar_activo(symbol)
     print("✅ Escaneo finalizado correctamente.")
