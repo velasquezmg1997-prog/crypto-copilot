@@ -1,5 +1,7 @@
 import os
 import time
+import json
+import base64
 import requests
 import pandas as pd
 import numpy as np
@@ -13,31 +15,90 @@ LIMIT = 300
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_REPO = "velasquezmg1997-prog/crypto-copilot"  # Tu repositorio
+FILE_PATH = "cooldown.json"
+
+COOLDOWN_SEGUNDOS = 3600  # 1 hora de cooldown
 
 # Inicializar cliente de KuCoin
 exchange = ccxt.kucoin({
     'enableRateLimit': True
 })
 
-# Diccionario para llevar registro del último aviso por cripto (Cooldown de 1 hora)
-ultimas_alertas = {}
-COOLDOWN_SEGUNDOS = 60  # 60 segundos para prueba
-
 def obtener_hora_espana():
     utc_now = datetime.now(timezone.utc)
     espana_now = utc_now + timedelta(hours=2)
     return espana_now.hour, espana_now.strftime("%H:%M")
 
+def cargar_cooldowns_github():
+    if not GITHUB_TOKEN:
+        return {}
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{FILE_PATH}"
+    # Cabecera para evitar la caché de GitHub y obtener siempre la versión más reciente
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}", 
+        "Accept": "vnd.github+json",
+        "Cache-Control": "no-cache"
+    }
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            content_encoded = response.json().get("content", "")
+            content_decoded = base64.b64decode(content_encoded).decode("utf-8")
+            return json.loads(content_decoded)
+    except Exception as e:
+        print(f"Error cargando cooldowns desde GitHub: {e}")
+    return {}
+
+def guardar_cooldowns_github(ultimas_alertas):
+    if not GITHUB_TOKEN:
+        return
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{FILE_PATH}"
+    headers = {
+        "Authorization": f"Bearer {GITHUB_TOKEN}", 
+        "Accept": "vnd.github+json",
+        "Cache-Control": "no-cache"
+    }
+    
+    # Obtener el SHA actual del archivo (necesario para actualizarlo en GitHub)
+    sha = None
+    try:
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code == 200:
+            sha = res.json().get("sha")
+    except Exception:
+        pass
+
+    content_str = json.dumps(ultimas_alertas, indent=4)
+    content_encoded = base64.b64encode(content_str.encode("utf-8")).decode("utf-8")
+
+    payload = {
+        "message": "Update cooldown state [skip ci]",
+        "content": content_encoded,
+        "sha": sha
+    } if sha else {
+        "message": "Create cooldown state [skip ci]",
+        "content": content_encoded
+    }
+
+    try:
+        requests.put(url, headers=headers, json=payload, timeout=10)
+    except Exception as e:
+        print(f"Error guardando cooldowns en GitHub: {e}")
+
 def enviar_telegram(mensaje, symbol):
     hora_espana, hora_str = obtener_hora_espana()
 
-    # 1. Filtro estricto de silencio nocturno (00:00 a 07:59)
+    # 1. Filtro de silencio nocturno (00:00 a 07:59)
     if 0 <= hora_espana < 8:
         print(f"🔕 [SILENCIO NOCTURNO] {hora_str}h España. Alerta de {symbol} omitida.")
         return
 
-    # 2. Filtro de Cooldown (No repetir el mismo activo por 1 hora)
+    # 2. Cargar estado actual de cooldowns desde GitHub
+    ultimas_alertas = cargar_cooldowns_github()
     tiempo_actual = time.time()
+
     if symbol in ultimas_alertas:
         tiempo_transcurrido = tiempo_actual - ultimas_alertas[symbol]
         if tiempo_transcurrido < COOLDOWN_SEGUNDOS:
@@ -53,8 +114,10 @@ def enviar_telegram(mensaje, symbol):
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
         requests.post(url, json=payload, timeout=10)
-        ultimas_alertas[symbol] = tiempo_actual  # Guardar el momento exacto del envío
-        print(f"📲 Alerta enviada para {symbol}. Cooldown de 1 hora activado.")
+        # Actualizar y guardar el nuevo tiempo en GitHub
+        ultimas_alertas[symbol] = tiempo_actual
+        guardar_cooldowns_github(ultimas_alertas)
+        print(f"📲 Alerta enviada para {symbol}. Cooldown de 1 hora activado y sincronizado en GitHub.")
     except Exception as e:
         print(f"Error enviando mensaje a Telegram: {e}")
 
