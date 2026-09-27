@@ -35,7 +35,6 @@ def cargar_cooldowns_github():
     if not GITHUB_TOKEN:
         return {}
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{FILE_PATH}"
-    # Cabeceras anti-caché para obtener siempre la versión más fresca de GitHub
     headers = {
         "Authorization": f"Bearer {GITHUB_TOKEN}", 
         "Accept": "vnd.github+json",
@@ -61,7 +60,6 @@ def guardar_cooldowns_github(ultimas_alertas):
         "Cache-Control": "no-cache"
     }
     
-    # Obtener el SHA actual del archivo (necesario para actualizarlo en GitHub)
     sha = None
     try:
         res = requests.get(url, headers=headers, timeout=10)
@@ -114,7 +112,6 @@ def enviar_telegram(mensaje, symbol):
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
         requests.post(url, json=payload, timeout=10)
-        # Actualizar y guardar el nuevo tiempo en GitHub
         ultimas_alertas[symbol] = tiempo_actual
         guardar_cooldowns_github(ultimas_alertas)
         print(f"📲 Alerta enviada para {symbol}. Cooldown de 1 hora activado y sincronizado en GitHub.")
@@ -169,6 +166,18 @@ def calcular_indicadores(df):
 
     # SMA Volumen (20)
     df['vol_sma'] = df['volume'].rolling(20).mean()
+
+    # ADX (14) - Cálculo de fuerza de tendencia
+    plus_dm = df['high'].diff()
+    minus_dm = df['low'].diff()
+    plus_dm = np.where((plus_dm > minus_dm) & (plus_dm > 0), plus_dm, 0.0)
+    minus_dm = np.where((minus_dm > plus_dm) & (minus_dm > 0), minus_dm, 0.0)
+    
+    tr14 = tr.rolling(14).sum()
+    plus_di = 100 * (pd.Series(plus_dm).rolling(14).sum() / (tr14 + 1e-10))
+    minus_di = 100 * (pd.Series(minus_dm).rolling(14).sum() / (tr14 + 1e-10))
+    dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-10)
+    df['adx'] = dx.rolling(14).mean()
     
     return df
 
@@ -179,7 +188,7 @@ def analizar_activo(symbol):
         return
     
     df = calcular_indicadores(df)
-    if df is None or df['ema200'].isnull().iloc[-1]:
+    if df is None or df['ema200'].isnull().iloc[-1] or df['adx'].isnull().iloc[-1]:
         print(f"❌ Datos insuficientes tras cálculo para {symbol}")
         return
 
@@ -194,6 +203,7 @@ def analizar_activo(symbol):
     vol_sma = last['vol_sma']
     ema9 = last['ema9']
     ema21 = last['ema21']
+    adx = last['adx']
 
     symbol_clean = symbol.replace("/", "")
 
@@ -206,7 +216,8 @@ def analizar_activo(symbol):
     if macd_hist > 0:
         puntos += 30
 
-    if puntos >= 70:
+    # Filtro estricto de fuerza de tendencia: ADX > 25 obligatorio para calificar
+    if puntos >= 70 and adx > 25:
         stop_loss = precio - (1.5 * atr)
         take_profit1 = precio + (1.0 * atr)
         take_profit2 = precio + (2.0 * atr)
@@ -224,11 +235,12 @@ def analizar_activo(symbol):
 
         msg = (
             f"🚨 *ALERTA DE ENTRADA (LONG 🟢) - {symbol_clean} {TIMEFRAME}*\n\n"
-            f"🔥 *Confluencia Técnica:* `{puntos}% / 100%` (Setup de Momentum / Ruptura Intradía)\n\n"
+            f"🔥 *Confluencia Técnica:* `{puntos}% / 100%` (Setup de Momentum con ADX Fuerte)\n\n"
             f"---\n\n"
-            f"📈 *Análisis Multitest:*\n"
+            f"📈 *Análisis Multitest & Tendencia:*\n"
+            f"• *ADX (14) [Fuerza de Tendencia]:* `{adx:.1f}` (Fuerte tendencia confirmada > 25).\n"
             f"• *Volumen & Flujo Institucional:* {vol_desc}\n"
-            f"• *MACD (12, 26, 9):* Histograma {'alcista' if macd_hist > 0 else 'bajista'} en expansión (`{macd_hist:+.4f}`), validando la aceleración del impulso.\n"
+            f"• *MACD (12, 26, 9):* Histograma alcista en expansión (`{macd_hist:+.4f}`), validando aceleración.\n"
             f"• *RSI (14):* Situado en `{rsi:.1f}` con tracción alcista.\n"
             f"• *Estructura de EMAs:* {ema_desc}\n\n"
             f"---\n\n"
@@ -244,12 +256,12 @@ def analizar_activo(symbol):
         )
         enviar_telegram(msg, symbol)
     else:
-        print(f"ℹ️ {symbol}: Confluencia del {puntos}% (Sin señal).")
+        print(f"ℹ️ {symbol}: Confluencia del {puntos}% | ADX: {adx:.1f} (Sin señal o filtrado por mercado lateral).")
 
 def main():
     hora_espana, hora_str = obtener_hora_espana()
     print(f"🕒 Hora España: {hora_str}hs")
-    print("🔍 Escaneando 10 activos (15m)...")
+    print("🔍 Escaneando 10 activos con filtro ADX (15m)...")
     for symbol in SYMBOLS:
         analizar_activo(symbol)
     print("✅ Escaneo finalizado correctamente.")
