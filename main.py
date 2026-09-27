@@ -167,7 +167,7 @@ def calcular_indicadores(df):
     # SMA Volumen (20)
     df['vol_sma'] = df['volume'].rolling(20).mean()
 
-    # ADX (14) - Cálculo de fuerza de tendencia
+    # ADX (14)
     plus_dm = df['high'].diff()
     minus_dm = df['low'].diff()
     plus_dm = np.where((plus_dm > minus_dm) & (plus_dm > 0), plus_dm, 0.0)
@@ -207,61 +207,86 @@ def analizar_activo(symbol):
 
     symbol_clean = symbol.replace("/", "")
 
-    puntos = 0
-    
+    # --- EVALUACIÓN LONG (COMPRA) ---
+    puntos_long = 0
     if precio > ema200:
-        puntos += 35
+        puntos_long += 35
     if rsi > 50:
-        puntos += 35
+        puntos_long += 35
     if macd_hist > 0:
-        puntos += 30
+        puntos_long += 30
 
-    # Filtro estricto de fuerza de tendencia: ADX > 25 obligatorio para calificar
-    if puntos >= 70 and adx > 25:
+    if puntos_long >= 70 and adx > 25:
         stop_loss = precio - (1.5 * atr)
         take_profit1 = precio + (1.0 * atr)
         take_profit2 = precio + (2.0 * atr)
         riesgo_pct = ((precio - stop_loss) / precio) * 100
 
-        if volume > vol_sma:
-            vol_desc = "Confirmación activa de volumen institucional absorbiendo la oferta local, impulsando el precio hacia zonas de liquidez superior."
-        else:
-            vol_desc = "Volumen dentro del promedio; seguimiento de flujo continuo de órdenes en la zona actual."
-
-        if ema9 > ema21:
-            ema_desc = f"Alineación alcista confirmada (EMA 9 por encima de EMA 21). EMA 200 en ${ema200:.4f} actuando como pivote crítico."
-        else:
-            ema_desc = f"Operativa contra la tendencia macro inmediata (EMA 200 en ${ema200:.4f} actuando como pivote crítico de ruptura). Setup de momentum rápido."
+        vol_desc = "Confirmación activa de volumen institucional absorbiendo la oferta local." if volume > vol_sma else "Volumen dentro del promedio."
+        ema_desc = "Alineación alcista confirmada (EMA 9 sobre EMA 21)." if ema9 > ema21 else "Operativa de rebote contra tendencia macro."
 
         msg = (
             f"🚨 *ALERTA DE ENTRADA (LONG 🟢) - {symbol_clean} {TIMEFRAME}*\n\n"
-            f"🔥 *Confluencia Técnica:* `{puntos}% / 100%` (Setup de Momentum con ADX Fuerte)\n\n"
+            f"🔥 *Confluencia Técnica:* `{puntos_long}% / 100%` (ADX: `{adx:.1f}`)\n\n"
             f"---\n\n"
-            f"📈 *Análisis Multitest & Tendencia:*\n"
-            f"• *ADX (14) [Fuerza de Tendencia]:* `{adx:.1f}` (Fuerte tendencia confirmada > 25).\n"
-            f"• *Volumen & Flujo Institucional:* {vol_desc}\n"
-            f"• *MACD (12, 26, 9):* Histograma alcista en expansión (`{macd_hist:+.4f}`), validando aceleración.\n"
-            f"• *RSI (14):* Situado en `{rsi:.1f}` con tracción alcista.\n"
-            f"• *Estructura de EMAs:* {ema_desc}\n\n"
+            f"📈 *Análisis Multitest:*\n"
+            f"• *Volumen:* {vol_desc}\n"
+            f"• *MACD:* Histograma alcista (`{macd_hist:+.4f}`).\n"
+            f"• *RSI:* `{rsi:.1f}`\n"
+            f"• *EMAs:* {ema_desc}\n\n"
             f"---\n\n"
-            f"🎯 *Parámetros Técnicos Adaptativos (ATR):*\n\n"
-            f"• *Precio de Entrada:* `${precio:.4f}`\n"
-            f"• *Stop Loss:* `${stop_loss:.4f}` (Riesgo: ~`{riesgo_pct:.2f}%`)\n"
-            f"• *Take Profit 1:* `${take_profit1:.4f}` (Recompensa inicial / Resistencia inmediata)\n"
-            f"• *Take Profit 2:* `${take_profit2:.4f}` (Extensión de rango ATR / Liquidez mayor)\n\n"
-            f"---\n\n"
-            f"⚙️ *Gestión de Riesgo Senior:*\n"
-            f"• *Trailing / Breakeven:* Al alcanzar el TP1, mover automáticamente el Stop Loss a precio de entrada (Breakeven) y tomar beneficios parciales (50-70%).\n"
-            f"• *Nota Operativa:* Monitorear la reacción en torno a la EMA 200 (`${ema200:.4f}`); el cierre de vela de 15m por encima de este nivel consolidará el movimiento hacia TP2."
+            f"🎯 *Parámetros (ATR):*\n"
+            f"• *Entrada:* `${precio:.4f}`\n"
+            f"• *Stop Loss:* `${stop_loss:.4f}` (~`{riesgo_pct:.2f}%`)\n"
+            f"• *Take Profit 1:* `${take_profit1:.4f}`\n"
+            f"• *Take Profit 2:* `${take_profit2:.4f}`"
         )
         enviar_telegram(msg, symbol)
-    else:
-        print(f"ℹ️ {symbol}: Confluencia del {puntos}% | ADX: {adx:.1f} (Sin señal o filtrado por mercado lateral).")
+        return
+
+    # --- EVALUACIÓN SHORT (VENTA) ---
+    puntos_short = 0
+    if precio < ema200:
+        puntos_short += 35
+    if rsi < 50:
+        puntos_short += 35
+    if macd_hist < 0:
+        puntos_short += 30
+
+    if puntos_short >= 70 and adx > 25:
+        stop_loss = precio + (1.5 * atr)
+        take_profit1 = precio - (1.0 * atr)
+        take_profit2 = precio - (2.0 * atr)
+        riesgo_pct = ((stop_loss - precio) / precio) * 100
+
+        vol_desc = "Presión de venta institucional con volumen activo." if volume > vol_sma else "Volumen moderado en zona bajista."
+        ema_desc = "Alineación bajista confirmada (EMA 9 bajo EMA 21)." if ema9 < ema21 else "Rechazo bajista en resistencia clave."
+
+        msg = (
+            f"🚨 *ALERTA DE ENTRADA (SHORT 🔴) - {symbol_clean} {TIMEFRAME}*\n\n"
+            f"🔥 *Confluencia Técnica:* `{puntos_short}% / 100%` (ADX: `{adx:.1f}`)\n\n"
+            f"---\n\n"
+            f"📉 *Análisis Multitest:*\n"
+            f"• *Volumen:* {vol_desc}\n"
+            f"• *MACD:* Histograma bajista (`{macd_hist:+.4f}`).\n"
+            f"• *RSI:* `{rsi:.1f}`\n"
+            f"• *EMAs:* {ema_desc}\n\n"
+            f"---\n\n"
+            f"🎯 *Parámetros (ATR):*\n"
+            f"• *Entrada:* `${precio:.4f}`\n"
+            f"• *Stop Loss:* `${stop_loss:.4f}` (~`{riesgo_pct:.2f}%`)\n"
+            f"• *Take Profit 1:* `${take_profit1:.4f}`\n"
+            f"• *Take Profit 2:* `${take_profit2:.4f}`"
+        )
+        enviar_telegram(msg, symbol)
+        return
+
+    print(f"ℹ️ {symbol}: Sin señal clara (Long: {puntos_long}%, Short: {puntos_short}%, ADX: {adx:.1f}).")
 
 def main():
     hora_espana, hora_str = obtener_hora_espana()
     print(f"🕒 Hora España: {hora_str}hs")
-    print("🔍 Escaneando 10 activos con filtro ADX (15m)...")
+    print("🔍 Escaneando 10 activos (Bidireccional Long/Short con ADX)...")
     for symbol in SYMBOLS:
         analizar_activo(symbol)
     print("✅ Escaneo finalizado correctamente.")
