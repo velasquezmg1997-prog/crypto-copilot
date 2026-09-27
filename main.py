@@ -10,7 +10,7 @@ SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT
 TIMEFRAME = "15m"
 LIMIT = 300
 
-# Horario de silencio en España (00:00 a 08:00)
+# Horario de silencio en España (00:00 a 08:00 CEST / UTC+2)
 HORA_INICIO_SILENCIO = 0   # 00:00
 HORA_FIN_SILENCIO = 8      # 08:00
 
@@ -23,28 +23,26 @@ exchange = ccxt.kucoin({
 })
 
 def es_horario_silencioso():
-    # España está en UTC+2 (Horario de Verano CEST)
+    # Calcular hora actual en España (UTC+2)
     tz_espana = timezone(timedelta(hours=2))
     hora_espana = datetime.now(tz_espana).hour
-    
-    # Comprobar si está entre las 00:00 y las 07:59
-    if HORA_INICIO_SILENCIO <= hora_espana < HORA_FIN_SILENCIO:
-        return True, hora_espana
-    return False, hora_espana
+    es_silencio = HORA_INICIO_SILENCIO <= hora_espana < HORA_FIN_SILENCIO
+    return es_silencio, hora_espana
 
-def enviar_telegram(mensaje):
-    silencio, hora_actual = es_horario_silencioso()
-    if silencio:
-        print(f"🔕 Horario nocturno ({hora_actual}:00h España). Notificación a Telegram silenciada.")
+def enviar_telegram(mensaje, es_silencio, hora_actual):
+    if es_silencio:
+        print(f"🔕 Horario nocturno ({hora_actual}:00h España). Notificación a Telegram OMITIDA.")
         return
 
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("⚠️ Variables de Telegram no configuradas.")
         return
+
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
         requests.post(url, json=payload, timeout=10)
+        print("📲 Mensaje enviado a Telegram con éxito.")
     except Exception as e:
         print(f"Error enviando mensaje a Telegram: {e}")
 
@@ -99,7 +97,7 @@ def calcular_indicadores(df):
     
     return df
 
-def analizar_activo(symbol):
+def analizar_activo(symbol, es_silencio, hora_actual):
     df = obtener_datos(symbol)
     if df is None:
         print(f"❌ No se obtuvieron suficientes datos para {symbol}")
@@ -169,15 +167,17 @@ def analizar_activo(symbol):
             f"• *Trailing / Breakeven:* Al alcanzar el TP1, mover automáticamente el Stop Loss a precio de entrada (Breakeven) y tomar beneficios parciales (50-70%).\n"
             f"• *Nota Operativa:* Monitorear la reacción en torno a la EMA 200 (`${ema200:.4f}`); el cierre de vela de 15m por encima de este nivel consolidará el movimiento hacia TP2."
         )
-        enviar_telegram(msg)
-        print(f"📲 Señal analizada para {symbol} ({puntos}%).")
+        enviar_telegram(msg, es_silencio, hora_actual)
     else:
         print(f"ℹ️ {symbol}: Confluencia del {puntos}% (Sin señal).")
 
 def main():
-    print("🔍 Escaneando 10 activos (15m)...")
+    es_silencio, hora_actual = es_horario_silencioso()
+    print(f"🔍 Escaneando 10 activos (15m)... [Hora España: {hora_actual}:00h | Silencio: {es_silencio}]")
+    
     for symbol in SYMBOLS:
-        analizar_activo(symbol)
+        analizar_activo(symbol, es_silencio, hora_actual)
+        
     print("✅ Escaneo finalizado correctamente.")
 
 if __name__ == "__main__":
