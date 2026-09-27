@@ -3,21 +3,42 @@ import requests
 import pandas as pd
 import numpy as np
 import ccxt
+from datetime import datetime
+import zoneinfo
 
 # Configuración de pares y parámetros
 SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT", "AVAX/USDT", "NEAR/USDT", "LINK/USDT", "SUI/USDT"]
 TIMEFRAME = "15m"
 LIMIT = 300
 
+# Rango de silencio (Hora de España)
+HORA_INICIO_SILENCIO = 0   # 00:00
+HORA_FIN_SILENCIO = 8      # 08:00
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# Inicializar cliente de KuCoin (Libre de geobloqueos)
+# Inicializar cliente de KuCoin
 exchange = ccxt.kucoin({
     'enableRateLimit': True
 })
 
+def es_horario_silencioso():
+    # Obtener hora actual en España (Europe/Madrid)
+    tz_espana = zoneinfo.ZoneInfo("Europe/Madrid")
+    hora_actual = datetime.now(tz_espana).hour
+    
+    # Comprobar si está en la franja de 00:00 a 08:00
+    if HORA_INICIO_SILENCIO <= hora_actual < HORA_FIN_SILENCIO:
+        return True, hora_actual
+    return False, hora_actual
+
 def enviar_telegram(mensaje):
+    silencio, hora_actual = es_horario_silencioso()
+    if silencio:
+        print(f"🔕 Horario nocturno ({hora_actual}:00h España). Notificación a Telegram silenciada.")
+        return
+
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("⚠️ Variables de Telegram no configuradas.")
         return
@@ -63,14 +84,14 @@ def calcular_indicadores(df):
     df['signal'] = df['macd'].ewm(span=9, adjust=False).mean()
     df['hist'] = df['macd'] - df['signal']
     
-    # ATR (14) para gestión de riesgo
+    # ATR (14)
     high_low = df['high'] - df['low']
     high_close = np.abs(df['high'] - df['close'].shift())
     low_close = np.abs(df['low'] - df['close'].shift())
     tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
     df['atr'] = tr.rolling(14).mean()
 
-    # EMA 9 y EMA 21 para estructura rápida
+    # EMAs rápidas
     df['ema9'] = df['close'].ewm(span=9, adjust=False).mean()
     df['ema21'] = df['close'].ewm(span=21, adjust=False).mean()
 
@@ -106,7 +127,6 @@ def analizar_activo(symbol):
 
     puntos = 0
     
-    # Confluencia
     if precio > ema200:
         puntos += 35
     if rsi > 50:
@@ -115,19 +135,16 @@ def analizar_activo(symbol):
         puntos += 30
 
     if puntos >= 70:
-        # Cálculos adaptativos ATR
         stop_loss = precio - (1.5 * atr)
         take_profit1 = precio + (1.0 * atr)
         take_profit2 = precio + (2.0 * atr)
         riesgo_pct = ((precio - stop_loss) / precio) * 100
 
-        # Análisis de volumen
         if volume > vol_sma:
             vol_desc = "Confirmación activa de volumen institucional absorbiendo la oferta local, impulsando el precio hacia zonas de liquidez superior."
         else:
             vol_desc = "Volumen dentro del promedio; seguimiento de flujo continuo de órdenes en la zona actual."
 
-        # Análisis de estructura
         if ema9 > ema21:
             ema_desc = f"Alineación alcista confirmada (EMA 9 por encima de EMA 21). EMA 200 en ${ema200:.4f} actuando como pivote crítico."
         else:
@@ -154,7 +171,7 @@ def analizar_activo(symbol):
             f"• *Nota Operativa:* Monitorear la reacción en torno a la EMA 200 (`${ema200:.4f}`); el cierre de vela de 15m por encima de este nivel consolidará el movimiento hacia TP2."
         )
         enviar_telegram(msg)
-        print(f"📲 Señal enviada para {symbol} ({puntos}%).")
+        print(f"📲 Señal analizada para {symbol} ({puntos}%).")
     else:
         print(f"ℹ️ {symbol}: Confluencia del {puntos}% (Sin señal).")
 
