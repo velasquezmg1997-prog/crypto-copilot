@@ -35,7 +35,7 @@ def cargar_cooldowns_github():
     if not GITHUB_TOKEN:
         return {}
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{FILE_PATH}"
-    # Cabecera para evitar la caché de GitHub y obtener siempre la versión más reciente
+    # Cabeceras anti-caché para obtener siempre la versión más fresca de GitHub
     headers = {
         "Authorization": f"Bearer {GITHUB_TOKEN}", 
         "Accept": "vnd.github+json",
@@ -90,7 +90,7 @@ def guardar_cooldowns_github(ultimas_alertas):
 def enviar_telegram(mensaje, symbol):
     hora_espana, hora_str = obtener_hora_espana()
 
-    # 1. Filtro de silencio nocturno (00:00 a 07:59)
+    # 1. Filtro estricto de silencio nocturno (00:00 a 07:59)
     if 0 <= hora_espana < 8:
         print(f"🔕 [SILENCIO NOCTURNO] {hora_str}h España. Alerta de {symbol} omitida.")
         return
