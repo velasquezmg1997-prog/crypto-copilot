@@ -11,6 +11,10 @@ LIMIT = 300  # 300 velas para cálculo correcto de EMA 200 y métricas
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+}
+
 def enviar_telegram(mensaje):
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("⚠️ Variables de Telegram no configuradas.")
@@ -25,7 +29,7 @@ def enviar_telegram(mensaje):
 def obtener_datos(symbol):
     url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={INTERVAL}&limit={LIMIT}"
     try:
-        res = requests.get(url, timeout=10)
+        res = requests.get(url, headers=HEADERS, timeout=10)
         data = res.json()
         if not isinstance(data, list) or len(data) < 200:
             return None
@@ -87,7 +91,7 @@ def analizar_activo(symbol):
     puntos = 0
     detalles = []
 
-    # Estrategia de Confluencia Alcant
+    # Estrategia de Confluencia Alcista
     if precio > ema:
         puntos += 35
         detalles.append("Tendencia Alcista (Precio > EMA 200)")
