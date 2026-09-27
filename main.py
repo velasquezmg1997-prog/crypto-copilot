@@ -21,7 +21,7 @@ exchange = ccxt.kucoin({
 
 # Diccionario para llevar registro del último aviso por cripto (Cooldown de 1 hora)
 ultimas_alertas = {}
-COOLDOWN_SEGUNDOS = 3600  # 3600 segundos = 1 hora
+COOLDOWN_SEGUNDOS = 60  # 60 segundos para prueba
 
 def obtener_hora_espana():
     utc_now = datetime.now(timezone.utc)
