@@ -1,15 +1,9 @@
 import os
-# Forzar zona horaria a España a nivel de sistema operativo del contenedor
-os.environ['TZ'] = 'Europe/Madrid'
-import time
-if hasattr(time, 'tzset'):
-    time.tzset()
-
 import requests
 import pandas as pd
 import numpy as np
 import ccxt
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 # Configuración de pares y parámetros
 SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT", "AVAX/USDT", "NEAR/USDT", "LINK/USDT", "SUI/USDT"]
@@ -25,10 +19,13 @@ exchange = ccxt.kucoin({
 })
 
 def enviar_telegram(mensaje):
-    # Candado estricto dentro de la función de envío (00:00 a 07:59 hora de España)
-    hora_actual = datetime.now().hour
-    if 0 <= hora_actual < 8:
-        print(f"🔕 [SILENCIO NOCTURNO] Hora actual: {hora_actual}:00h España. Envío a Telegram bloqueado.")
+    # Cálculo matemático exacto de la hora en España (UTC + 2 en verano) sin depender del sistema operativo
+    utc_now = datetime.now(timezone.utc)
+    hora_espana = (utc_now.hour + 2) % 24
+
+    # Candado estricto de 00:00 a 07:59 hora de España
+    if 0 <= hora_espana < 8:
+        print(f"🔕 [SILENCIO NOCTURNO] Hora España calculada: {hora_espana}:00h. Envío a Telegram bloqueado.")
         return
 
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
@@ -157,7 +154,7 @@ def analizar_activo(symbol):
             f"🎯 *Parámetros Técnicos Adaptativos (ATR):*\n\n"
             f"• *Precio de Entrada:* `${precio:.4f}`\n"
             f"• *Stop Loss:* `${stop_loss:.4f}` (Riesgo: ~`{riesgo_pct:.2f}%`)\n"
-            f"• *Take Profit 1:* `${take_profit1:.4f}` (Recompensa inicial / Resistencia inmediata)\n"
+            f"• *Take Profit 1:* `${take_profit1:.4f}` (Reconpensa inicial / Resistencia inmediata)\n"
             f"• *Take Profit 2:* `${take_profit2:.4f}` (Extensión de rango ATR / Liquidez mayor)\n\n"
             f"---\n\n"
             f"⚙️ *Gestión de Riesgo Senior:*\n"
@@ -169,7 +166,10 @@ def analizar_activo(symbol):
         print(f"ℹ️ {symbol}: Confluencia del {puntos}% (Sin señal).")
 
 def main():
-    print(f"🕒 Hora actual del sistema: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    utc_now = datetime.now(timezone.utc)
+    hora_espana = (utc_now.hour + 2) % 24
+    print(f"🕒 Hora UTC actual: {utc_now.strftime('%H:%M')} | Hora calculada España: {hora_espana}:00h")
+    
     print("🔍 Escaneando 10 activos (15m)...")
     for symbol in SYMBOLS:
         analizar_activo(symbol)
