@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import ccxt
 
-# Configuración de pares y parámetros
+# Configuración de pares y parámetros (Formato Estándar CCXT)
 SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT", "AVAX/USDT", "NEAR/USDT", "LINK/USDT", "SUI/USDT"]
 TIMEFRAME = "15m"
 LIMIT = 300
@@ -12,10 +12,9 @@ LIMIT = 300
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# Inicializar cliente de Binance
-exchange = ccxt.binance({
-    'enableRateLimit': True,
-    'options': {'defaultType': 'spot'}
+# Inicializar cliente de KuCoin (Libre de geobloqueos en EE. UU. / Cloud)
+exchange = ccxt.kucoin({
+    'enableRateLimit': True
 })
 
 def enviar_telegram(mensaje):
