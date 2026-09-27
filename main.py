@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 import pandas as pd
 import numpy as np
@@ -18,15 +19,31 @@ exchange = ccxt.kucoin({
     'enableRateLimit': True
 })
 
-def enviar_telegram(mensaje):
-    # Cálculo matemático exacto de la hora en España (UTC + 2 en verano) sin depender del sistema operativo
-    utc_now = datetime.now(timezone.utc)
-    hora_espana = (utc_now.hour + 2) % 24
+# Diccionario para llevar registro del último aviso por cripto (Cooldown de 1 hora)
+ultimas_alertas = {}
+COOLDOWN_SEGUNDOS = 3600  # 3600 segundos = 1 hora
 
-    # Candado estricto de 00:00 a 07:59 hora de España
+def obtener_hora_espana():
+    utc_now = datetime.now(timezone.utc)
+    espana_now = utc_now + timedelta(hours=2)
+    return espana_now.hour, espana_now.strftime("%H:%M")
+
+def enviar_telegram(mensaje, symbol):
+    hora_espana, hora_str = obtener_hora_espana()
+
+    # 1. Filtro estricto de silencio nocturno (00:00 a 07:59)
     if 0 <= hora_espana < 8:
-        print(f"🔕 [SILENCIO NOCTURNO] Hora España calculada: {hora_espana}:00h. Envío a Telegram bloqueado.")
+        print(f"🔕 [SILENCIO NOCTURNO] {hora_str}h España. Alerta de {symbol} omitida.")
         return
+
+    # 2. Filtro de Cooldown (No repetir el mismo activo por 1 hora)
+    tiempo_actual = time.time()
+    if symbol in ultimas_alertas:
+        tiempo_transcurrido = tiempo_actual - ultimas_alertas[symbol]
+        if tiempo_transcurrido < COOLDOWN_SEGUNDOS:
+            minutos_restantes = int((COOLDOWN_SEGUNDOS - tiempo_transcurrido) / 60)
+            print(f"⏳ Cooldown activo para {symbol}. Faltan {minutos_restantes} min para permitir otra alerta.")
+            return
 
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
         print("⚠️ Variables de Telegram no configuradas.")
@@ -36,7 +53,8 @@ def enviar_telegram(mensaje):
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": mensaje, "parse_mode": "Markdown"}
     try:
         requests.post(url, json=payload, timeout=10)
-        print("📲 Mensaje enviado a Telegram con éxito.")
+        ultimas_alertas[symbol] = tiempo_actual  # Guardar el momento exacto del envío
+        print(f"📲 Alerta enviada para {symbol}. Cooldown de 1 hora activado.")
     except Exception as e:
         print(f"Error enviando mensaje a Telegram: {e}")
 
@@ -154,22 +172,20 @@ def analizar_activo(symbol):
             f"🎯 *Parámetros Técnicos Adaptativos (ATR):*\n\n"
             f"• *Precio de Entrada:* `${precio:.4f}`\n"
             f"• *Stop Loss:* `${stop_loss:.4f}` (Riesgo: ~`{riesgo_pct:.2f}%`)\n"
-            f"• *Take Profit 1:* `${take_profit1:.4f}` (Reconpensa inicial / Resistencia inmediata)\n"
+            f"• *Take Profit 1:* `${take_profit1:.4f}` (Recompensa inicial / Resistencia inmediata)\n"
             f"• *Take Profit 2:* `${take_profit2:.4f}` (Extensión de rango ATR / Liquidez mayor)\n\n"
             f"---\n\n"
             f"⚙️ *Gestión de Riesgo Senior:*\n"
             f"• *Trailing / Breakeven:* Al alcanzar el TP1, mover automáticamente el Stop Loss a precio de entrada (Breakeven) y tomar beneficios parciales (50-70%).\n"
             f"• *Nota Operativa:* Monitorear la reacción en torno a la EMA 200 (`${ema200:.4f}`); el cierre de vela de 15m por encima de este nivel consolidará el movimiento hacia TP2."
         )
-        enviar_telegram(msg)
+        enviar_telegram(msg, symbol)
     else:
         print(f"ℹ️ {symbol}: Confluencia del {puntos}% (Sin señal).")
 
 def main():
-    utc_now = datetime.now(timezone.utc)
-    hora_espana = (utc_now.hour + 2) % 24
-    print(f"🕒 Hora UTC actual: {utc_now.strftime('%H:%M')} | Hora calculada España: {hora_espana}:00h")
-    
+    hora_espana, hora_str = obtener_hora_espana()
+    print(f"🕒 Hora España: {hora_str}hs")
     print("🔍 Escaneando 10 activos (15m)...")
     for symbol in SYMBOLS:
         analizar_activo(symbol)
