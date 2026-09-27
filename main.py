@@ -3,15 +3,14 @@ import requests
 import pandas as pd
 import numpy as np
 import ccxt
-from datetime import datetime
-import zoneinfo
+from datetime import datetime, timezone, timedelta
 
 # Configuración de pares y parámetros
 SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT", "AVAX/USDT", "NEAR/USDT", "LINK/USDT", "SUI/USDT"]
 TIMEFRAME = "15m"
 LIMIT = 300
 
-# Rango de silencio (Hora de España)
+# Horario de silencio en España (00:00 a 08:00)
 HORA_INICIO_SILENCIO = 0   # 00:00
 HORA_FIN_SILENCIO = 8      # 08:00
 
@@ -24,14 +23,14 @@ exchange = ccxt.kucoin({
 })
 
 def es_horario_silencioso():
-    # Obtener hora actual en España (Europe/Madrid)
-    tz_espana = zoneinfo.ZoneInfo("Europe/Madrid")
-    hora_actual = datetime.now(tz_espana).hour
+    # España está en UTC+2 (Horario de Verano CEST)
+    tz_espana = timezone(timedelta(hours=2))
+    hora_espana = datetime.now(tz_espana).hour
     
-    # Comprobar si está en la franja de 00:00 a 08:00
-    if HORA_INICIO_SILENCIO <= hora_actual < HORA_FIN_SILENCIO:
-        return True, hora_actual
-    return False, hora_actual
+    # Comprobar si está entre las 00:00 y las 07:59
+    if HORA_INICIO_SILENCIO <= hora_espana < HORA_FIN_SILENCIO:
+        return True, hora_espana
+    return False, hora_espana
 
 def enviar_telegram(mensaje):
     silencio, hora_actual = es_horario_silencioso()
