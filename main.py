@@ -19,7 +19,7 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GITHUB_REPO = "velasquezmg1997-prog/crypto-copilot"  # Tu repositorio
 FILE_PATH = "cooldown.json"
 
-COOLDOWN_SEGUNDOS = 3600  # 1 hora de cooldown
+COOLDOWN_SEGUNDOS = COOLDOWN_SEGUNDOS = 1800  # 30 minutos de cooldown
 
 # Inicializar cliente de KuCoin
 exchange = ccxt.kucoin({
