@@ -86,14 +86,7 @@ def guardar_cooldowns_github(ultimas_alertas):
         print(f"Error guardando cooldowns en GitHub: {e}")
 
 def enviar_telegram(mensaje, symbol):
-    hora_espana, hora_str = obtener_hora_espana()
-
-    # 1. Filtro estricto de silencio nocturno (00:00 a 07:59)
-    if 0 <= hora_espana < 8:
-        print(f"🔕 [SILENCIO NOCTURNO] {hora_str}h España. Alerta de {symbol} omitida.")
-        return
-
-    # 2. Cargar estado actual de cooldowns desde GitHub
+    # 1. Cargar estado actual de cooldowns desde GitHub
     ultimas_alertas = cargar_cooldowns_github()
     tiempo_actual = time.time()
 
@@ -105,7 +98,7 @@ def enviar_telegram(mensaje, symbol):
             return
 
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("⚠️ Variables de Telegram no configuradas.")
+        print("⚠️️ Variables de Telegram no configuradas.")
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -114,7 +107,7 @@ def enviar_telegram(mensaje, symbol):
         requests.post(url, json=payload, timeout=10)
         ultimas_alertas[symbol] = tiempo_actual
         guardar_cooldowns_github(ultimas_alertas)
-        print(f"📲 Alerta enviada para {symbol}. Cooldown de 1 hora activado y sincronizado en GitHub.")
+        print(f"📲 Alerta enviada para {symbol} (Operativa 24/7). Cooldown de 1 hora activado y sincronizado.")
     except Exception as e:
         print(f"Error enviando mensaje a Telegram: {e}")
 
@@ -222,10 +215,18 @@ def analizar_activo(symbol):
         take_profit2 = precio + (2.0 * atr)
         riesgo_pct = ((precio - stop_loss) / precio) * 100
 
-        vol_desc = "Confirmación activa de volumen institucional absorbiendo la oferta local." if volume > vol_sma else "Volumen dentro del promedio."
-        ema_desc = "Alineación alcista confirmada (EMA 9 sobre EMA 21)." if ema9 > ema21 else "Operativa de rebote contra tendencia macro."
+        vol_desc = "Confirmación activa de volumen institucional." if volume > vol_sma else "Volumen dentro del promedio."
+        ema_desc = "Alineación alcista confirmada (EMA 9 sobre EMA 21)." if ema9 > ema21 else "Operativa de rebote."
 
         msg = (
+            f"```ORDER_SIGNAL\n"
+            f"PAIR: {symbol_clean}\n"
+            f"TYPE: LONG\n"
+            f"ENTRY: {precio:.4f}\n"
+            f"SL: {stop_loss:.4f}\n"
+            f"TP1: {take_profit1:.4f}\n"
+            f"TP2: {take_profit2:.4f}\n"
+            f"END_SIGNAL```\n\n"
             f"🚨 *ALERTA DE ENTRADA (LONG 🟢) - {symbol_clean} {TIMEFRAME}*\n\n"
             f"🔥 *Confluencia Técnica:* `{puntos_long}% / 100%` (ADX: `{adx:.1f}`)\n\n"
             f"---\n\n"
@@ -263,6 +264,14 @@ def analizar_activo(symbol):
         ema_desc = "Alineación bajista confirmada (EMA 9 bajo EMA 21)." if ema9 < ema21 else "Rechazo bajista en resistencia clave."
 
         msg = (
+            f"```ORDER_SIGNAL\n"
+            f"PAIR: {symbol_clean}\n"
+            f"TYPE: SHORT\n"
+            f"ENTRY: {precio:.4f}\n"
+            f"SL: {stop_loss:.4f}\n"
+            f"TP1: {take_profit1:.4f}\n"
+            f"TP2: {take_profit2:.4f}\n"
+            f"END_SIGNAL```\n\n"
             f"🚨 *ALERTA DE ENTRADA (SHORT 🔴) - {symbol_clean} {TIMEFRAME}*\n\n"
             f"🔥 *Confluencia Técnica:* `{puntos_short}% / 100%` (ADX: `{adx:.1f}`)\n\n"
             f"---\n\n"
@@ -286,7 +295,7 @@ def analizar_activo(symbol):
 def main():
     hora_espana, hora_str = obtener_hora_espana()
     print(f"🕒 Hora España: {hora_str}hs")
-    print("🔍 Escaneando 10 activos (Bidireccional Long/Short con ADX)...")
+    print("🔍 Escaneando 10 activos (Operativa 24/7 sin filtro nocturno)...")
     for symbol in SYMBOLS:
         analizar_activo(symbol)
     print("✅ Escaneo finalizado correctamente.")
