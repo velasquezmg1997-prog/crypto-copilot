@@ -8,23 +8,33 @@ import numpy as np
 import ccxt
 from datetime import datetime, timezone, timedelta
 
-# Configuración de pares y parámetros
-SYMBOLS = ["BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT", "ADA/USDT", "AVAX/USDT", "NEAR/USDT", "LINK/USDT", "SUI/USDT"]
-TIMEFRAME = "15m"
+# Configuración específica por tipo de activo
+CONFIG_ACTIVOS = {
+    "BTC/USDT":  {"atr_sl": 1.2, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 20},
+    "ETH/USDT":  {"atr_sl": 1.2, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 20},
+    "SOL/USDT":  {"atr_sl": 1.6, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 25},
+    "BNB/USDT":  {"atr_sl": 1.4, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 22},
+    "XRP/USDT":  {"atr_sl": 1.6, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 25},
+    "ADA/USDT":  {"atr_sl": 1.6, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 25},
+    "AVAX/USDT": {"atr_sl": 1.6, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 25},
+    "NEAR/USDT": {"atr_sl": 1.6, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 25},
+    "LINK/USDT": {"atr_sl": 1.6, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 25},
+    "SUI/USDT":  {"atr_sl": 2.0, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 28},
+}
+
+TIMEFRAME_OPERATIVO = "15m"
+TIMEFRAME_MACRO = "1h"
 LIMIT = 300
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GITHUB_REPO = "velasquezmg1997-prog/crypto-copilot"  # Tu repositorio
+GITHUB_REPO = "velasquezmg1997-prog/crypto-copilot"
 FILE_PATH = "cooldown.json"
 
-COOLDOWN_SEGUNDOS = COOLDOWN_SEGUNDOS = 1800  # 30 minutos de cooldown
+COOLDOWN_SEGUNDOS = 1800  # 30 minutos
 
-# Inicializar cliente de KuCoin
-exchange = ccxt.kucoin({
-    'enableRateLimit': True
-})
+exchange = ccxt.kucoin({'enableRateLimit': True})
 
 def obtener_hora_espana():
     utc_now = datetime.now(timezone.utc)
@@ -81,12 +91,14 @@ def guardar_cooldowns_github(ultimas_alertas):
     }
 
     try:
-        requests.put(url, headers=headers, json=payload, timeout=10)
+        if not sha:
+            requests.post(url, headers=headers, json=payload, timeout=10)
+        else:
+            requests.put(url, headers=headers, json=payload, timeout=10)
     except Exception as e:
         print(f"Error guardando cooldowns en GitHub: {e}")
 
 def enviar_telegram(mensaje, symbol):
-    # 1. Cargar estado actual de cooldowns desde GitHub
     ultimas_alertas = cargar_cooldowns_github()
     tiempo_actual = time.time()
 
@@ -94,11 +106,11 @@ def enviar_telegram(mensaje, symbol):
         tiempo_transcurrido = tiempo_actual - ultimas_alertas[symbol]
         if tiempo_transcurrido < COOLDOWN_SEGUNDOS:
             minutos_restantes = int((COOLDOWN_SEGUNDOS - tiempo_transcurrido) / 60)
-            print(f"⏳ Cooldown activo para {symbol}. Faltan {minutos_restantes} min para permitir otra alerta.")
+            print(f"⏳ Cooldown activo para {symbol}. Faltan {minutos_restantes} min.")
             return
 
     if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("⚠️️ Variables de Telegram no configuradas.")
+        print("⚠ Variables de Telegram no configuradas.")
         return
 
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -107,13 +119,13 @@ def enviar_telegram(mensaje, symbol):
         requests.post(url, json=payload, timeout=10)
         ultimas_alertas[symbol] = tiempo_actual
         guardar_cooldowns_github(ultimas_alertas)
-        print(f"📲 Alerta enviada para {symbol} (Operativa 24/7). Cooldown de 1 hora activado y sincronizado.")
+        print(f"📲 Alerta enviada para {symbol}.")
     except Exception as e:
         print(f"Error enviando mensaje a Telegram: {e}")
 
-def obtener_datos(symbol):
+def obtener_datos(symbol, timeframe):
     try:
-        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=TIMEFRAME, limit=LIMIT)
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=LIMIT)
         if not ohlcv or len(ohlcv) < 200:
             return None
         
@@ -122,45 +134,52 @@ def obtener_datos(symbol):
         df[cols] = df[cols].astype(float)
         return df
     except Exception as e:
-        print(f"Error obteniendo datos de {symbol}: {e}")
+        print(f"Error obteniendo datos de {symbol} ({timeframe}): {e}")
         return None
+
+def calcular_vwap(df):
+    typical_price = (df['high'] + df['low'] + df['close']) / 3
+    tp_vol = typical_price * df['volume']
+    cum_tp_vol = tp_vol.cumsum()
+    cum_vol = df['volume'].cumsum()
+    vwap = cum_tp_vol / (cum_vol + 1e-10)
+    return vwap
 
 def calcular_indicadores(df):
     if df is None or len(df) < 200:
         return None
     
-    # EMA 200
+    # EMAs
+    df['ema9'] = df['close'].ewm(span=9, adjust=False).mean()
+    df['ema21'] = df['close'].ewm(span=21, adjust=False).mean()
     df['ema200'] = df['close'].ewm(span=200, adjust=False).mean()
     
-    # RSI (14)
+    # RSI
     delta = df['close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     rs = gain / (loss + 1e-10)
     df['rsi'] = 100 - (100 / (1 + rs))
     
-    # MACD (12, 26, 9)
+    # MACD
     exp1 = df['close'].ewm(span=12, adjust=False).mean()
     exp2 = df['close'].ewm(span=26, adjust=False).mean()
     df['macd'] = exp1 - exp2
     df['signal'] = df['macd'].ewm(span=9, adjust=False).mean()
     df['hist'] = df['macd'] - df['signal']
     
-    # ATR (14)
+    # ATR
     high_low = df['high'] - df['low']
     high_close = np.abs(df['high'] - df['close'].shift())
     low_close = np.abs(df['low'] - df['close'].shift())
     tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
     df['atr'] = tr.rolling(14).mean()
 
-    # EMAs rápidas
-    df['ema9'] = df['close'].ewm(span=9, adjust=False).mean()
-    df['ema21'] = df['close'].ewm(span=21, adjust=False).mean()
-
-    # SMA Volumen (20)
+    # Volumen y VWAP
     df['vol_sma'] = df['volume'].rolling(20).mean()
+    df['vwap'] = calcular_vwap(df)
 
-    # ADX (14)
+    # ADX
     plus_dm = df['high'].diff()
     minus_dm = df['low'].diff()
     plus_dm = np.where((plus_dm > minus_dm) & (plus_dm > 0), plus_dm, 0.0)
@@ -172,17 +191,32 @@ def calcular_indicadores(df):
     dx = 100 * np.abs(plus_di - minus_di) / (plus_di + minus_di + 1e-10)
     df['adx'] = dx.rolling(14).mean()
     
+    # Estructura: Máximos y Mínimos recientes
+    df['highest_5'] = df['high'].shift(1).rolling(5).max()
+    df['lowest_5'] = df['low'].shift(1).rolling(5).min()
+
     return df
 
 def analizar_activo(symbol):
-    df = obtener_datos(symbol)
+    config = CONFIG_ACTIVOS.get(symbol, {"atr_sl": 1.5, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 25})
+
+    # 1. ANALISIS MACRO (1 Hora)
+    df_macro = obtener_datos(symbol, TIMEFRAME_MACRO)
+    if df_macro is None:
+        return
+    df_macro['ema200'] = df_macro['close'].ewm(span=200, adjust=False).mean()
+    macro_close = df_macro['close'].iloc[-1]
+    macro_ema200 = df_macro['ema200'].iloc[-1]
+
+    tendencia_macro = "BULLISH" if macro_close > macro_ema200 else "BEARISH"
+
+    # 2. ANALISIS OPERATIVO (15 Minutos)
+    df = obtener_datos(symbol, TIMEFRAME_OPERATIVO)
     if df is None:
-        print(f"❌ No se obtuvieron suficientes datos para {symbol}")
         return
     
     df = calcular_indicadores(df)
     if df is None or df['ema200'].isnull().iloc[-1] or df['adx'].isnull().iloc[-1]:
-        print(f"❌ Datos insuficientes tras cálculo para {symbol}")
         return
 
     last = df.iloc[-1]
@@ -197,26 +231,31 @@ def analizar_activo(symbol):
     ema9 = last['ema9']
     ema21 = last['ema21']
     adx = last['adx']
+    vwap = last['vwap']
+    highest_5 = last['highest_5']
+    lowest_5 = last['lowest_5']
 
     symbol_clean = symbol.replace("/", "")
 
-    # --- EVALUACIÓN LONG (COMPRA) ---
-    puntos_long = 0
-    if precio > ema200:
-        puntos_long += 35
-    if rsi > 50:
-        puntos_long += 35
-    if macd_hist > 0:
-        puntos_long += 30
+    # --- CONDICIONES DE ENTRADA LONG (PRO) ---
+    cond_long = (
+        tendencia_macro == "BULLISH" and        # 1. Filtro Macro 1h
+        precio > ema200 and                    # 2. Tendencia 15m
+        precio > vwap and                      # 3. Control Comprador (VWAP)
+        ema9 > ema21 and                       # 4. Cruce de EMAs
+        rsi > 52 and                           # 5. Momentum RSI
+        macd_hist > 0 and                      # 6. Momentum MACD
+        volume > vol_sma and                   # 7. Confirmación de Volumen
+        adx > config['adx_min'] and            # 8. Fuerza de Tendencia Adaptativa
+        precio > highest_5                     # 9. Breakout Estructural
+    )
 
-    if puntos_long >= 70 and adx > 25:
-        stop_loss = precio - (1.5 * atr)
-        take_profit1 = precio + (1.0 * atr)
-        take_profit2 = precio + (2.0 * atr)
+    if cond_long:
+        distancia_sl = config['atr_sl'] * atr
+        stop_loss = precio - distancia_sl
+        take_profit1 = precio + (distancia_sl * config['rr_tp1'])
+        take_profit2 = precio + (distancia_sl * config['rr_tp2'])
         riesgo_pct = ((precio - stop_loss) / precio) * 100
-
-        vol_desc = "Confirmación activa de volumen institucional." if volume > vol_sma else "Volumen dentro del promedio."
-        ema_desc = "Alineación alcista confirmada (EMA 9 sobre EMA 21)." if ema9 > ema21 else "Operativa de rebote."
 
         msg = (
             f"```ORDER_SIGNAL\n"
@@ -227,16 +266,10 @@ def analizar_activo(symbol):
             f"TP1: {take_profit1:.4f}\n"
             f"TP2: {take_profit2:.4f}\n"
             f"END_SIGNAL```\n\n"
-            f"🚨 *ALERTA DE ENTRADA (LONG 🟢) - {symbol_clean} {TIMEFRAME}*\n\n"
-            f"🔥 *Confluencia Técnica:* `{puntos_long}% / 100%` (ADX: `{adx:.1f}`)\n\n"
-            f"---\n\n"
-            f"📈 *Análisis Multitest:*\n"
-            f"• *Volumen:* {vol_desc}\n"
-            f"• *MACD:* Histograma alcista (`{macd_hist:+.4f}`).\n"
-            f"• *RSI:* `{rsi:.1f}`\n"
-            f"• *EMAs:* {ema_desc}\n\n"
-            f"---\n\n"
-            f"🎯 *Parámetros (ATR):*\n"
+            f"🚨 *ALERTA PRO (LONG 🟢) - {symbol_clean} {TIMEFRAME_OPERATIVO}*\n\n"
+            f"📊 *Filtro Macro (1h):* Alcista 🟢\n"
+            f"🔥 *ADX:* `{adx:.1f}` | *VWAP:* `${vwap:.4f}`\n\n"
+            f"🎯 *Parámetros Adaptativos (R:B 1:{config['rr_tp1']}):*\n"
             f"• *Entrada:* `${precio:.4f}`\n"
             f"• *Stop Loss:* `${stop_loss:.4f}` (~`{riesgo_pct:.2f}%`)\n"
             f"• *Take Profit 1:* `${take_profit1:.4f}`\n"
@@ -245,23 +278,25 @@ def analizar_activo(symbol):
         enviar_telegram(msg, symbol)
         return
 
-    # --- EVALUACIÓN SHORT (VENTA) ---
-    puntos_short = 0
-    if precio < ema200:
-        puntos_short += 35
-    if rsi < 50:
-        puntos_short += 35
-    if macd_hist < 0:
-        puntos_short += 30
+    # --- CONDICIONES DE ENTRADA SHORT (PRO) ---
+    cond_short = (
+        tendencia_macro == "BEARISH" and       # 1. Filtro Macro 1h
+        precio < ema200 and                    # 2. Tendencia 15m
+        precio < vwap and                      # 3. Control Vendedor (VWAP)
+        ema9 < ema21 and                       # 4. Cruce de EMAs
+        rsi < 48 and                           # 5. Momentum RSI
+        macd_hist < 0 and                      # 6. Momentum MACD
+        volume > vol_sma and                   # 7. Confirmación de Volumen
+        adx > config['adx_min'] and            # 8. Fuerza de Tendencia Adaptativa
+        precio < lowest_5                      # 9. Breakout Estructural
+    )
 
-    if puntos_short >= 70 and adx > 25:
-        stop_loss = precio + (1.5 * atr)
-        take_profit1 = precio - (1.0 * atr)
-        take_profit2 = precio - (2.0 * atr)
+    if cond_short:
+        distancia_sl = config['atr_sl'] * atr
+        stop_loss = precio + distancia_sl
+        take_profit1 = precio - (distancia_sl * config['rr_tp1'])
+        take_profit2 = precio - (distancia_sl * config['rr_tp2'])
         riesgo_pct = ((stop_loss - precio) / precio) * 100
-
-        vol_desc = "Presión de venta institucional con volumen activo." if volume > vol_sma else "Volumen moderado en zona bajista."
-        ema_desc = "Alineación bajista confirmada (EMA 9 bajo EMA 21)." if ema9 < ema21 else "Rechazo bajista en resistencia clave."
 
         msg = (
             f"```ORDER_SIGNAL\n"
@@ -272,16 +307,10 @@ def analizar_activo(symbol):
             f"TP1: {take_profit1:.4f}\n"
             f"TP2: {take_profit2:.4f}\n"
             f"END_SIGNAL```\n\n"
-            f"🚨 *ALERTA DE ENTRADA (SHORT 🔴) - {symbol_clean} {TIMEFRAME}*\n\n"
-            f"🔥 *Confluencia Técnica:* `{puntos_short}% / 100%` (ADX: `{adx:.1f}`)\n\n"
-            f"---\n\n"
-            f"📉 *Análisis Multitest:*\n"
-            f"• *Volumen:* {vol_desc}\n"
-            f"• *MACD:* Histograma bajista (`{macd_hist:+.4f}`).\n"
-            f"• *RSI:* `{rsi:.1f}`\n"
-            f"• *EMAs:* {ema_desc}\n\n"
-            f"---\n\n"
-            f"🎯 *Parámetros (ATR):*\n"
+            f"🚨 *ALERTA PRO (SHORT 🔴) - {symbol_clean} {TIMEFRAME_OPERATIVO}*\n\n"
+            f"📊 *Filtro Macro (1h):* Bajista 🔴\n"
+            f"🔥 *ADX:* `{adx:.1f}` | *VWAP:* `${vwap:.4f}`\n\n"
+            f"🎯 *Parámetros Adaptativos (R:B 1:{config['rr_tp1']}):*\n"
             f"• *Entrada:* `${precio:.4f}`\n"
             f"• *Stop Loss:* `${stop_loss:.4f}` (~`{riesgo_pct:.2f}%`)\n"
             f"• *Take Profit 1:* `${take_profit1:.4f}`\n"
@@ -290,15 +319,14 @@ def analizar_activo(symbol):
         enviar_telegram(msg, symbol)
         return
 
-    print(f"ℹ️ {symbol}: Sin señal clara (Long: {puntos_long}%, Short: {puntos_short}%, ADX: {adx:.1f}).")
+    print(f"ℹ️ {symbol}: Sin confluencia profesional suficiente.")
 
 def main():
-    hora_espana, hora_str = obtener_hora_espana()
-    print(f"🕒 Hora España: {hora_str}hs")
-    print("🔍 Escaneando 10 activos (Operativa 24/7 sin filtro nocturno)...")
-    for symbol in SYMBOLS:
+    _, hora_str = obtener_hora_espana()
+    print(f"🕒 Escaneando con modelo Pro a las {hora_str}hs...")
+    for symbol in CONFIG_ACTIVOS.keys():
         analizar_activo(symbol)
-    print("✅ Escaneo finalizado correctamente.")
+    print("✅ Escaneo finalizado.")
 
 if __name__ == "__main__":
     main()
