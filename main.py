@@ -12,47 +12,76 @@ from zoneinfo import ZoneInfo
 
 
 # ============================================================
-# 1. CONFIGURACIÓN DE ACTIVOS
+# CONFIGURACIÓN
 # ============================================================
 
 CONFIG_ACTIVOS = {
-    "BTC/USDT":  {"atr_sl": 1.2, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 20},
-    "ETH/USDT":  {"atr_sl": 1.2, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 20},
-    "SOL/USDT":  {"atr_sl": 1.6, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 25},
-    "BNB/USDT":  {"atr_sl": 1.4, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 22},
-    "XRP/USDT":  {"atr_sl": 1.6, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 25},
-    "ADA/USDT":  {"atr_sl": 1.6, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 25},
-    "AVAX/USDT": {"atr_sl": 1.6, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 25},
-    "NEAR/USDT": {"atr_sl": 1.6, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 25},
-    "LINK/USDT": {"atr_sl": 1.6, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 25},
-    "SUI/USDT":  {"atr_sl": 2.0, "rr_tp1": 2.0, "rr_tp2": 3.5, "adx_min": 28},
+    "BTCUSDT": {
+        "adx_min": 20,
+        "sl_atr": 1.2,
+    },
+    "ETHUSDT": {
+        "adx_min": 20,
+        "sl_atr": 1.2,
+    },
+    "BNBUSDT": {
+        "adx_min": 22,
+        "sl_atr": 1.4,
+    },
+    "SOLUSDT": {
+        "adx_min": 25,
+        "sl_atr": 1.6,
+    },
+    "XRPUSDT": {
+        "adx_min": 25,
+        "sl_atr": 1.6,
+    },
+    "ADAUSDT": {
+        "adx_min": 25,
+        "sl_atr": 1.6,
+    },
+    "AVAXUSDT": {
+        "adx_min": 25,
+        "sl_atr": 1.6,
+    },
+    "NEARUSDT": {
+        "adx_min": 25,
+        "sl_atr": 1.6,
+    },
+    "LINKUSDT": {
+        "adx_min": 25,
+        "sl_atr": 1.6,
+    },
+    "SUIUSDT": {
+        "adx_min": 28,
+        "sl_atr": 2.0,
+    },
 }
 
 
 TIMEFRAME_OPERATIVO = "15m"
 TIMEFRAME_MACRO = "1h"
 
-# Pedimos suficientes velas para calcular EMA200 y demás indicadores
 LIMIT = 300
 
-# Cooldown por activo
 COOLDOWN_SEGUNDOS = 1800  # 30 minutos
 
 
 # ============================================================
-# 2. TELEGRAM / GITHUB
+# CREDENCIALES
 # ============================================================
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+
 GITHUB_REPO = "velasquezmg1997-prog/crypto-copilot"
-FILE_PATH = "cooldown.json"
+GITHUB_FILE = "cooldown.json"
 
 
 # ============================================================
-# 3. EXCHANGE
+# EXCHANGE
 # ============================================================
 
 exchange = ccxt.kucoin({
@@ -61,15 +90,14 @@ exchange = ccxt.kucoin({
 
 
 # ============================================================
-# 4. HORA ESPAÑA
+# HORA ESPAÑA
 # ============================================================
 
 def obtener_hora_espana():
-    """
-    Obtiene la hora real de España usando la zona horaria
-    Europe/Madrid, incluyendo automáticamente horario de verano.
-    """
-    ahora = datetime.now(ZoneInfo("Europe/Madrid"))
+
+    ahora = datetime.now(
+        ZoneInfo("Europe/Madrid")
+    )
 
     return (
         ahora.hour,
@@ -79,13 +107,10 @@ def obtener_hora_espana():
 
 
 # ============================================================
-# 5. COOLDOWN - GITHUB
+# GITHUB - CARGAR COOLDOWNS
 # ============================================================
 
 def cargar_cooldowns_github():
-    """
-    Recupera el estado de cooldown desde GitHub.
-    """
 
     if not GITHUB_TOKEN:
         print("⚠️ GITHUB_TOKEN no configurado.")
@@ -93,53 +118,60 @@ def cargar_cooldowns_github():
 
     url = (
         f"https://api.github.com/repos/"
-        f"{GITHUB_REPO}/contents/{FILE_PATH}"
+        f"{GITHUB_REPO}/contents/{GITHUB_FILE}"
     )
 
     headers = {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json",
-        "Cache-Control": "no-cache"
+        "Accept": "application/vnd.github+json"
     }
 
     try:
+
         response = requests.get(
             url,
             headers=headers,
-            timeout=10
+            timeout=15
         )
 
         if response.status_code == 200:
 
             data = response.json()
 
-            content_encoded = data.get("content", "")
-
-            if not content_encoded:
-                return {}
-
-            content_decoded = base64.b64decode(
-                content_encoded
+            contenido = base64.b64decode(
+                data["content"]
             ).decode("utf-8")
 
-            datos = json.loads(content_decoded)
+            return json.loads(contenido)
 
-            if isinstance(datos, dict):
-                return datos
+        elif response.status_code == 404:
+
+            print("ℹ️ cooldown.json no existe todavía.")
+            return {}
+
+        else:
+
+            print(
+                f"⚠️ Error GitHub cargando cooldowns: "
+                f"{response.status_code}"
+            )
+
+            return {}
 
     except Exception as e:
 
         print(
-            f"⚠️ Error cargando cooldowns desde GitHub: {e}"
+            f"⚠️ Error leyendo cooldowns: {e}"
         )
 
-    return {}
+        return {}
 
 
-def guardar_cooldowns_github(ultimas_alertas):
-    """
-    Guarda el estado actualizado de cooldowns en GitHub.
-    """
+# ============================================================
+# GITHUB - GUARDAR COOLDOWNS
+# ============================================================
+
+def guardar_cooldowns_github(cooldowns):
 
     if not GITHUB_TOKEN:
         print("⚠️ GITHUB_TOKEN no configurado.")
@@ -147,189 +179,92 @@ def guardar_cooldowns_github(ultimas_alertas):
 
     url = (
         f"https://api.github.com/repos/"
-        f"{GITHUB_REPO}/contents/{FILE_PATH}"
+        f"{GITHUB_REPO}/contents/{GITHUB_FILE}"
     )
 
     headers = {
         "Authorization": f"Bearer {GITHUB_TOKEN}",
-        "Accept": "application/vnd.github+json",
-        "Cache-Control": "no-cache"
+        "Accept": "application/vnd.github+json"
     }
-
-    sha = None
-
-    # --------------------------------------------------------
-    # Obtener SHA actual del archivo
-    # --------------------------------------------------------
 
     try:
 
+        # Obtener SHA actual
         response = requests.get(
             url,
             headers=headers,
-            timeout=10
+            timeout=15
         )
+
+        sha = None
 
         if response.status_code == 200:
-
             sha = response.json().get("sha")
 
-    except Exception as e:
-
-        print(
-            f"⚠️ No se pudo obtener SHA de GitHub: {e}"
+        contenido = json.dumps(
+            cooldowns,
+            indent=2
         )
 
-    # --------------------------------------------------------
-    # Preparar contenido
-    # --------------------------------------------------------
+        contenido_b64 = base64.b64encode(
+            contenido.encode("utf-8")
+        ).decode("utf-8")
 
-    content_str = json.dumps(
-        ultimas_alertas,
-        indent=4
-    )
-
-    content_encoded = base64.b64encode(
-        content_str.encode("utf-8")
-    ).decode("utf-8")
-
-    payload = {
-        "message": (
-            "Update cooldown state [skip ci]"
-            if sha
-            else
-            "Create cooldown state [skip ci]"
-        ),
-        "content": content_encoded
-    }
-
-    if sha:
-        payload["sha"] = sha
-
-    # --------------------------------------------------------
-    # Guardar
-    # --------------------------------------------------------
-
-    try:
+        payload = {
+            "message": "Actualizar cooldowns",
+            "content": contenido_b64
+        }
 
         if sha:
+            payload["sha"] = sha
 
-            response = requests.put(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=10
-            )
+        response = requests.put(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=15
+        )
 
-        else:
-
-            response = requests.post(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=10
-            )
-
-        if response.status_code in (200, 201):
+        if response.status_code in [200, 201]:
 
             return True
 
         print(
-            f"⚠️ GitHub respondió "
-            f"{response.status_code}: {response.text[:300]}"
-        )
-
-    except Exception as e:
-
-        print(
-            f"⚠️ Error guardando cooldowns en GitHub: {e}"
-        )
-
-    return False
-
-
-# ============================================================
-# 6. TELEGRAM
-# ============================================================
-
-def enviar_telegram(mensaje, symbol):
-    """
-    Envía una señal a Telegram respetando el cooldown.
-    """
-
-    ultimas_alertas = cargar_cooldowns_github()
-
-    tiempo_actual = time.time()
-
-    # --------------------------------------------------------
-    # Comprobar cooldown
-    # --------------------------------------------------------
-
-    if symbol in ultimas_alertas:
-
-        try:
-
-            ultima_alerta = float(
-                ultimas_alertas[symbol]
-            )
-
-            tiempo_transcurrido = (
-                tiempo_actual - ultima_alerta
-            )
-
-            if tiempo_transcurrido < COOLDOWN_SEGUNDOS:
-
-                minutos_restantes = max(
-                    1,
-                    int(
-                        (
-                            COOLDOWN_SEGUNDOS
-                            - tiempo_transcurrido
-                        ) / 60
-                    )
-                )
-
-                print(
-                    f"⏳ Cooldown activo para {symbol}. "
-                    f"Faltan aproximadamente "
-                    f"{minutos_restantes} min."
-                )
-
-                return False
-
-        except (ValueError, TypeError):
-
-            print(
-                f"⚠️ Timestamp inválido en cooldown "
-                f"para {symbol}. Se ignorará."
-            )
-
-    # --------------------------------------------------------
-    # Comprobar configuración Telegram
-    # --------------------------------------------------------
-
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-
-        print(
-            "⚠️ Variables TELEGRAM_TOKEN / "
-            "TELEGRAM_CHAT_ID no configuradas."
+            f"⚠️ Error guardando cooldowns: "
+            f"{response.status_code}"
         )
 
         return False
 
-    # --------------------------------------------------------
-    # Enviar
-    # --------------------------------------------------------
+    except Exception as e:
+
+        print(
+            f"⚠️ Error guardando cooldowns: {e}"
+        )
+
+        return False
+
+
+# ============================================================
+# TELEGRAM
+# ============================================================
+
+def enviar_telegram(mensaje):
+
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+
+        print("⚠️ Telegram no configurado.")
+
+        return False
 
     url = (
-        f"https://api.telegram.org/"
-        f"bot{TELEGRAM_TOKEN}/sendMessage"
+        f"https://api.telegram.org/bot"
+        f"{TELEGRAM_TOKEN}/sendMessage"
     )
 
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
-        "text": mensaje,
-        "parse_mode": "Markdown"
+        "text": mensaje
     }
 
     try:
@@ -337,78 +272,53 @@ def enviar_telegram(mensaje, symbol):
         response = requests.post(
             url,
             json=payload,
-            timeout=10
+            timeout=15
         )
 
-        if response.status_code != 200:
+        if response.status_code == 200:
 
-            print(
-                f"⚠️ Telegram respondió "
-                f"{response.status_code}: "
-                f"{response.text[:300]}"
-            )
-
-            return False
-
-        # ----------------------------------------------------
-        # Solo actualizar cooldown después de enviar
-        # correctamente
-        # ----------------------------------------------------
-
-        ultimas_alertas[symbol] = tiempo_actual
-
-        guardar_cooldowns_github(
-            ultimas_alertas
-        )
+            return True
 
         print(
-            f"📲 Alerta enviada correctamente "
-            f"para {symbol}."
+            f"⚠️ Error Telegram: "
+            f"{response.status_code}"
         )
 
-        return True
+        return False
 
     except Exception as e:
 
         print(
-            f"⚠️ Error enviando mensaje a Telegram: {e}"
+            f"⚠️ Error enviando Telegram: {e}"
         )
 
         return False
 
 
 # ============================================================
-# 7. OBTENER DATOS
+# OBTENER DATOS
 # ============================================================
 
-def obtener_datos(symbol, timeframe):
-    """
-    Obtiene OHLCV desde KuCoin.
-    """
+def obtener_datos(simbolo, timeframe):
+
+    simbolo_ccxt = simbolo.replace(
+        "USDT",
+        "/USDT"
+    )
 
     try:
 
         ohlcv = exchange.fetch_ohlcv(
-            symbol,
+            simbolo_ccxt,
             timeframe=timeframe,
             limit=LIMIT
         )
 
-        if not ohlcv:
-
-            print(
-                f"⚠️ No se recibieron datos "
-                f"para {symbol} ({timeframe})."
-            )
-
-            return None
-
         if len(ohlcv) < 200:
 
             print(
-                f"⚠️ Datos insuficientes para "
-                f"{symbol} ({timeframe}): "
-                f"{len(ohlcv)} velas."
+                f"⚠️ {simbolo}: "
+                f"Datos insuficientes."
             )
 
             return None
@@ -425,18 +335,18 @@ def obtener_datos(symbol, timeframe):
             ]
         )
 
-        columnas_numericas = [
+        for columna in [
             "open",
             "high",
             "low",
             "close",
             "volume"
-        ]
+        ]:
 
-        df[columnas_numericas] = (
-            df[columnas_numericas]
-            .astype(float)
-        )
+            df[columna] = pd.to_numeric(
+                df[columna],
+                errors="coerce"
+            )
 
         df["timestamp"] = pd.to_datetime(
             df["timestamp"],
@@ -453,161 +363,100 @@ def obtener_datos(symbol, timeframe):
     except Exception as e:
 
         print(
-            f"⚠️ Error obteniendo datos de "
-            f"{symbol} ({timeframe}): {e}"
+            f"❌ Error obteniendo datos "
+            f"{simbolo} {timeframe}: {e}"
         )
 
         return None
 
 
 # ============================================================
-# 8. VWAP
+# VWAP
 # ============================================================
 
 def calcular_vwap(df):
-    """
-    VWAP acumulado sobre las velas disponibles.
 
-    IMPORTANTE:
-    En esta V1 mantenemos el comportamiento de la estrategia
-    original. No lo convertimos todavía en VWAP diario.
-    """
-
-    typical_price = (
+    precio_tipico = (
         df["high"]
         + df["low"]
         + df["close"]
-    ) / 3.0
+    ) / 3
 
-    tp_vol = (
-        typical_price
-        * df["volume"]
-    )
-
-    cum_tp_vol = tp_vol.cumsum()
-
-    cum_vol = df["volume"].cumsum()
+    volumen = df["volume"]
 
     vwap = (
-        cum_tp_vol
-        / (cum_vol + 1e-10)
-    )
+        precio_tipico * volumen
+    ).cumsum() / volumen.cumsum()
 
     return vwap
 
 
 # ============================================================
-# 9. INDICADORES
+# INDICADORES
 # ============================================================
 
 def calcular_indicadores(df):
 
-    if df is None or len(df) < 200:
-        return None
-
     df = df.copy()
 
-    # --------------------------------------------------------
     # EMA
-    # --------------------------------------------------------
+    df["ema9"] = df["close"].ewm(
+        span=9,
+        adjust=False
+    ).mean()
 
-    df["ema9"] = (
-        df["close"]
-        .ewm(
-            span=9,
-            adjust=False
-        )
-        .mean()
-    )
+    df["ema21"] = df["close"].ewm(
+        span=21,
+        adjust=False
+    ).mean()
 
-    df["ema21"] = (
-        df["close"]
-        .ewm(
-            span=21,
-            adjust=False
-        )
-        .mean()
-    )
+    df["ema200"] = df["close"].ewm(
+        span=200,
+        adjust=False
+    ).mean()
 
-    df["ema200"] = (
-        df["close"]
-        .ewm(
-            span=200,
-            adjust=False
-        )
-        .mean()
-    )
-
-    # --------------------------------------------------------
     # RSI
-    # --------------------------------------------------------
-
     delta = df["close"].diff()
 
-    gain = (
-        delta.clip(lower=0)
-        .rolling(14)
-        .mean()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+
+    avg_gain = gain.rolling(14).mean()
+    avg_loss = loss.rolling(14).mean()
+
+    rs = avg_gain / avg_loss.replace(
+        0,
+        np.nan
     )
 
-    loss = (
-        (-delta.clip(upper=0))
-        .rolling(14)
-        .mean()
+    df["rsi"] = 100 - (
+        100 / (1 + rs)
     )
 
-    rs = gain / (loss + 1e-10)
-
-    df["rsi"] = (
-        100
-        - (
-            100
-            / (1 + rs)
-        )
-    )
-
-    # --------------------------------------------------------
     # MACD
-    # --------------------------------------------------------
+    ema12 = df["close"].ewm(
+        span=12,
+        adjust=False
+    ).mean()
 
-    ema12 = (
-        df["close"]
-        .ewm(
-            span=12,
-            adjust=False
-        )
-        .mean()
-    )
-
-    ema26 = (
-        df["close"]
-        .ewm(
-            span=26,
-            adjust=False
-        )
-        .mean()
-    )
+    ema26 = df["close"].ewm(
+        span=26,
+        adjust=False
+    ).mean()
 
     df["macd"] = ema12 - ema26
 
-    df["signal"] = (
+    df["macd_signal"] = df["macd"].ewm(
+        span=9,
+        adjust=False
+    ).mean()
+
+    df["macd_hist"] = (
         df["macd"]
-        .ewm(
-            span=9,
-            adjust=False
-        )
-        .mean()
+        - df["macd_signal"]
     )
 
-    df["hist"] = (
-        df["macd"]
-        - df["signal"]
-    )
-
-    # --------------------------------------------------------
     # ATR
-    # --------------------------------------------------------
-
     high_low = (
         df["high"]
         - df["low"]
@@ -615,15 +464,15 @@ def calcular_indicadores(df):
 
     high_close = (
         df["high"]
-        - df["close"].shift(1)
+        - df["close"].shift()
     ).abs()
 
     low_close = (
         df["low"]
-        - df["close"].shift(1)
+        - df["close"].shift()
     ).abs()
 
-    tr = pd.concat(
+    true_range = pd.concat(
         [
             high_low,
             high_close,
@@ -632,297 +481,243 @@ def calcular_indicadores(df):
         axis=1
     ).max(axis=1)
 
-    df["tr"] = tr
+    df["atr"] = true_range.rolling(
+        14
+    ).mean()
 
-    df["atr"] = (
-        tr
-        .rolling(14)
-        .mean()
-    )
-
-    # --------------------------------------------------------
     # Volumen
-    # --------------------------------------------------------
+    df["volume_sma20"] = df[
+        "volume"
+    ].rolling(20).mean()
 
-    df["vol_sma"] = (
-        df["volume"]
-        .rolling(20)
-        .mean()
-    )
-
-    # --------------------------------------------------------
     # VWAP
-    # --------------------------------------------------------
-
     df["vwap"] = calcular_vwap(df)
 
-    # --------------------------------------------------------
-    # ADX
-    #
-    # Implementación corregida:
-    # +DM y -DM se calculan independientemente.
-    # --------------------------------------------------------
+    # ========================================================
+    # ADX CORREGIDO
+    # ========================================================
 
-    up_move = (
-        df["high"]
-        .diff()
-    )
+    up_move = df["high"].diff()
 
     down_move = (
         df["low"].shift(1)
         - df["low"]
     )
 
+    plus_dm = np.where(
+        (up_move > down_move)
+        & (up_move > 0),
+        up_move,
+        0.0
+    )
+
+    minus_dm = np.where(
+        (down_move > up_move)
+        & (down_move > 0),
+        down_move,
+        0.0
+    )
+
     plus_dm = pd.Series(
-        np.where(
-            (up_move > down_move)
-            & (up_move > 0),
-            up_move,
-            0.0
-        ),
+        plus_dm,
         index=df.index
     )
 
     minus_dm = pd.Series(
-        np.where(
-            (down_move > up_move)
-            & (down_move > 0),
-            down_move,
-            0.0
-        ),
+        minus_dm,
         index=df.index
     )
 
-    tr14 = (
-        tr.rolling(14)
-        .sum()
-    )
-
-    plus_dm14 = (
-        plus_dm
-        .rolling(14)
-        .sum()
-    )
-
-    minus_dm14 = (
-        minus_dm
-        .rolling(14)
-        .sum()
-    )
+    atr14 = true_range.rolling(
+        14
+    ).sum()
 
     plus_di = (
         100
-        * plus_dm14
-        / (tr14 + 1e-10)
+        * plus_dm.rolling(14).sum()
+        / atr14
     )
 
     minus_di = (
         100
-        * minus_dm14
-        / (tr14 + 1e-10)
+        * minus_dm.rolling(14).sum()
+        / atr14
+    )
+
+    denominator = (
+        plus_di
+        + minus_di
     )
 
     dx = (
         100
         * (plus_di - minus_di).abs()
-        / (
-            plus_di
-            + minus_di
-            + 1e-10
+        / denominator.replace(
+            0,
+            np.nan
         )
     )
 
-    df["adx"] = (
-        dx
-        .rolling(14)
-        .mean()
-    )
+    df["adx"] = dx.rolling(
+        14
+    ).mean()
 
-    # --------------------------------------------------------
-    # Estructura
-    #
-    # shift(1) evita utilizar la vela actual para determinar
-    # el máximo/mínimo de referencia.
-    # --------------------------------------------------------
+    # ========================================================
+    # ESTRUCTURA
+    # ========================================================
 
     df["highest_5"] = (
         df["high"]
-        .shift(1)
         .rolling(5)
         .max()
+        .shift(1)
     )
 
     df["lowest_5"] = (
         df["low"]
-        .shift(1)
         .rolling(5)
         .min()
+        .shift(1)
     )
 
     return df
 
 
 # ============================================================
-# 10. VALIDACIÓN DE VELA CERRADA
+# ÚLTIMA VELA CERRADA
 # ============================================================
 
 def obtener_ultima_vela_cerrada(df):
-    """
-    La última fila recibida por el exchange puede estar todavía
-    en formación.
 
-    Por seguridad utilizamos -2 como última vela cerrada.
-    """
+    if len(df) < 2:
 
-    if df is None or len(df) < 3:
         return None
 
     return df.iloc[-2]
 
 
 # ============================================================
-# 11. ANALIZAR ACTIVO
+# FORMATEAR CONDICIÓN
 # ============================================================
 
-def analizar_activo(symbol):
+def mostrar_condicion(nombre, valor):
 
-    config = CONFIG_ACTIVOS.get(
-        symbol,
-        {
-            "atr_sl": 1.5,
-            "rr_tp1": 2.0,
-            "rr_tp2": 3.5,
-            "adx_min": 25
-        }
-    )
+    if valor:
+        print(f"   ✅ {nombre}")
+    else:
+        print(f"   ❌ {nombre}")
 
-    # ========================================================
-    # 11.1 MACRO 1H
-    # ========================================================
 
-    df_macro = obtener_datos(
-        symbol,
-        TIMEFRAME_MACRO
-    )
+# ============================================================
+# ANALIZAR ACTIVO
+# ============================================================
 
-    if df_macro is None:
-        return
+def analizar_activo(
+    simbolo,
+    config,
+    cooldowns
+):
 
-    df_macro["ema200"] = (
-        df_macro["close"]
-        .ewm(
-            span=200,
-            adjust=False
-        )
-        .mean()
-    )
-
-    macro = obtener_ultima_vela_cerrada(
-        df_macro
-    )
-
-    if macro is None:
-        return
-
-    macro_close = macro["close"]
-    macro_ema200 = macro["ema200"]
-
-    if pd.isna(macro_close) or pd.isna(macro_ema200):
-        return
-
-    tendencia_macro = (
-        "BULLISH"
-        if macro_close > macro_ema200
-        else "BEARISH"
-    )
+    print("=" * 60)
+    print(f"📊 {simbolo}")
 
     # ========================================================
-    # 11.2 OPERATIVO 15M
+    # DATOS
     # ========================================================
 
-    df = obtener_datos(
-        symbol,
+    df_15m = obtener_datos(
+        simbolo,
         TIMEFRAME_OPERATIVO
     )
 
-    if df is None:
-        return
-
-    df = calcular_indicadores(df)
-
-    if df is None:
-        return
-
-    last = obtener_ultima_vela_cerrada(df)
-
-    if last is None:
-        return
-
-    # ========================================================
-    # 11.3 VALIDAR INDICADORES
-    # ========================================================
-
-    columnas_requeridas = [
-        "close",
-        "ema200",
-        "rsi",
-        "hist",
-        "atr",
-        "volume",
-        "vol_sma",
-        "ema9",
-        "ema21",
-        "adx",
-        "vwap",
-        "highest_5",
-        "lowest_5"
-    ]
-
-    for columna in columnas_requeridas:
-
-        if pd.isna(last[columna]):
-
-            print(
-                f"⚠️ {symbol}: "
-                f"Indicador {columna} no disponible."
-            )
-
-            return
-
-    # ========================================================
-    # 11.4 VALORES
-    # ========================================================
-
-    precio = float(last["close"])
-
-    ema200 = float(last["ema200"])
-    rsi = float(last["rsi"])
-    macd_hist = float(last["hist"])
-    atr = float(last["atr"])
-
-    volume = float(last["volume"])
-    vol_sma = float(last["vol_sma"])
-
-    ema9 = float(last["ema9"])
-    ema21 = float(last["ema21"])
-
-    adx = float(last["adx"])
-    vwap = float(last["vwap"])
-
-    highest_5 = float(last["highest_5"])
-    lowest_5 = float(last["lowest_5"])
-
-    symbol_clean = symbol.replace(
-        "/",
-        ""
+    df_1h = obtener_datos(
+        simbolo,
+        TIMEFRAME_MACRO
     )
 
+    if df_15m is None or df_1h is None:
+
+        print(
+            f"❌ {simbolo}: "
+            f"No se pudieron obtener datos."
+        )
+
+        return
+
     # ========================================================
-    # 11.5 INFORMACIÓN DE DEBUG
+    # INDICADORES
     # ========================================================
 
-    print(
-        f"\n📊 {symbol_clean}"
+    df_15m = calcular_indicadores(
+        df_15m
+    )
+
+    df_1h = calcular_indicadores(
+        df_1h
+    )
+
+    vela_15m = obtener_ultima_vela_cerrada(
+        df_15m
+    )
+
+    vela_1h = obtener_ultima_vela_cerrada(
+        df_1h
+    )
+
+    if vela_15m is None or vela_1h is None:
+
+        print(
+            f"❌ {simbolo}: "
+            f"No hay vela cerrada suficiente."
+        )
+
+        return
+
+    # ========================================================
+    # VALORES
+    # ========================================================
+
+    precio = vela_15m["close"]
+
+    ema9 = vela_15m["ema9"]
+    ema21 = vela_15m["ema21"]
+    ema200 = vela_15m["ema200"]
+
+    rsi = vela_15m["rsi"]
+
+    macd_hist = vela_15m["macd_hist"]
+
+    atr = vela_15m["atr"]
+
+    volume = vela_15m["volume"]
+    volume_sma20 = vela_15m["volume_sma20"]
+
+    vwap = vela_15m["vwap"]
+
+    adx = vela_15m["adx"]
+
+    highest_5 = vela_15m["highest_5"]
+    lowest_5 = vela_15m["lowest_5"]
+
+    ema200_1h = vela_1h["ema200"]
+    close_1h = vela_1h["close"]
+
+    # ========================================================
+    # MACRO
+    # ========================================================
+
+    macro_bullish = (
+        close_1h > ema200_1h
+    )
+
+    macro_bearish = (
+        close_1h < ema200_1h
+    )
+
+    macro_text = (
+        "BULLISH"
+        if macro_bullish
+        else "BEARISH"
     )
 
     print(
@@ -930,7 +725,7 @@ def analizar_activo(symbol):
     )
 
     print(
-        f"   Macro 1h: {tendencia_macro}"
+        f"   Macro 1h: {macro_text}"
     )
 
     print(
@@ -939,7 +734,27 @@ def analizar_activo(symbol):
     )
 
     print(
+        f"   EMA200: {ema200:.6f}"
+    )
+
+    print(
+        f"   VWAP: {vwap:.6f}"
+    )
+
+    print(
         f"   RSI: {rsi:.2f}"
+    )
+
+    print(
+        f"   MACD Hist: {macd_hist:.6f}"
+    )
+
+    print(
+        f"   Volumen: {volume:.2f}"
+    )
+
+    print(
+        f"   Vol SMA20: {volume_sma20:.2f}"
     )
 
     print(
@@ -950,216 +765,258 @@ def analizar_activo(symbol):
         f"   ATR: {atr:.6f}"
     )
 
-    # ========================================================
-    # 11.6 LONG
-    # ========================================================
-
-    cond_long = (
-        tendencia_macro == "BULLISH"
-        and precio > ema200
-        and precio > vwap
-        and ema9 > ema21
-        and rsi > 52
-        and macd_hist > 0
-        and volume > vol_sma
-        and adx > config["adx_min"]
-        and precio > highest_5
+    print(
+        f"   Máximo 5 velas: {highest_5:.6f}"
     )
-
-    if cond_long:
-
-        distancia_sl = (
-            config["atr_sl"]
-            * atr
-        )
-
-        stop_loss = (
-            precio
-            - distancia_sl
-        )
-
-        take_profit1 = (
-            precio
-            + (
-                distancia_sl
-                * config["rr_tp1"]
-            )
-        )
-
-        take_profit2 = (
-            precio
-            + (
-                distancia_sl
-                * config["rr_tp2"]
-            )
-        )
-
-        riesgo_pct = (
-            (
-                precio
-                - stop_loss
-            )
-            / precio
-        ) * 100
-
-        msg = (
-            "```ORDER_SIGNAL\n"
-            f"PAIR: {symbol_clean}\n"
-            "TYPE: LONG\n"
-            f"ENTRY: {precio:.8f}\n"
-            f"SL: {stop_loss:.8f}\n"
-            f"TP1: {take_profit1:.8f}\n"
-            f"TP2: {take_profit2:.8f}\n"
-            "END_SIGNAL```\n\n"
-
-            f"🚨 *ALERTA PRO (LONG 🟢) - "
-            f"{symbol_clean} {TIMEFRAME_OPERATIVO}*\n\n"
-
-            f"📊 *Filtro Macro (1h):* "
-            f"Alcista 🟢\n"
-
-            f"🔥 *ADX:* `{adx:.1f}` | "
-            f"*VWAP:* `${vwap:.8f}`\n\n"
-
-            f"🎯 *Parámetros Adaptativos "
-            f"(R:B 1:{config['rr_tp1']}):*\n"
-
-            f"• *Entrada:* "
-            f"`${precio:.8f}`\n"
-
-            f"• *Stop Loss:* "
-            f"`${stop_loss:.8f}` "
-            f"(~`{riesgo_pct:.2f}%`)\n"
-
-            f"• *Take Profit 1:* "
-            f"`${take_profit1:.8f}`\n"
-
-            f"• *Take Profit 2:* "
-            f"`${take_profit2:.8f}`"
-        )
-
-        enviar_telegram(
-            msg,
-            symbol
-        )
-
-        return
-
-    # ========================================================
-    # 11.7 SHORT
-    # ========================================================
-
-    cond_short = (
-        tendencia_macro == "BEARISH"
-        and precio < ema200
-        and precio < vwap
-        and ema9 < ema21
-        and rsi < 48
-        and macd_hist < 0
-        and volume > vol_sma
-        and adx > config["adx_min"]
-        and precio < lowest_5
-    )
-
-    if cond_short:
-
-        distancia_sl = (
-            config["atr_sl"]
-            * atr
-        )
-
-        stop_loss = (
-            precio
-            + distancia_sl
-        )
-
-        take_profit1 = (
-            precio
-            - (
-                distancia_sl
-                * config["rr_tp1"]
-            )
-        )
-
-        take_profit2 = (
-            precio
-            - (
-                distancia_sl
-                * config["rr_tp2"]
-            )
-        )
-
-        riesgo_pct = (
-            (
-                stop_loss
-                - precio
-            )
-            / precio
-        ) * 100
-
-        msg = (
-            "```ORDER_SIGNAL\n"
-            f"PAIR: {symbol_clean}\n"
-            "TYPE: SHORT\n"
-            f"ENTRY: {precio:.8f}\n"
-            f"SL: {stop_loss:.8f}\n"
-            f"TP1: {take_profit1:.8f}\n"
-            f"TP2: {take_profit2:.8f}\n"
-            "END_SIGNAL```\n\n"
-
-            f"🚨 *ALERTA PRO (SHORT 🔴) - "
-            f"{symbol_clean} {TIMEFRAME_OPERATIVO}*\n\n"
-
-            f"📊 *Filtro Macro (1h):* "
-            f"Bajista 🔴\n"
-
-            f"🔥 *ADX:* `{adx:.1f}` | "
-            f"*VWAP:* `${vwap:.8f}`\n\n"
-
-            f"🎯 *Parámetros Adaptativos "
-            f"(R:B 1:{config['rr_tp1']}):*\n"
-
-            f"• *Entrada:* "
-            f"`${precio:.8f}`\n"
-
-            f"• *Stop Loss:* "
-            f"`${stop_loss:.8f}` "
-            f"(~`{riesgo_pct:.2f}%`)\n"
-
-            f"• *Take Profit 1:* "
-            f"`${take_profit1:.8f}`\n"
-
-            f"• *Take Profit 2:* "
-            f"`${take_profit2:.8f}`"
-        )
-
-        enviar_telegram(
-            msg,
-            symbol
-        )
-
-        return
 
     print(
-        f"ℹ️ {symbol_clean}: "
-        f"Sin confluencia suficiente."
+        f"   Mínimo 5 velas: {lowest_5:.6f}"
     )
+
+    # ========================================================
+    # CONDICIONES LONG
+    # ========================================================
+
+    long_macro = macro_bullish
+
+    long_ema200 = (
+        precio > ema200
+    )
+
+    long_vwap = (
+        precio > vwap
+    )
+
+    long_ema = (
+        ema9 > ema21
+    )
+
+    long_rsi = (
+        rsi > 52
+    )
+
+    long_macd = (
+        macd_hist > 0
+    )
+
+    long_volume = (
+        volume > volume_sma20
+    )
+
+    long_adx = (
+        adx > config["adx_min"]
+    )
+
+    long_breakout = (
+        precio > highest_5
+    )
+
+    # ========================================================
+    # CONDICIONES SHORT
+    # ========================================================
+
+    short_macro = macro_bearish
+
+    short_ema200 = (
+        precio < ema200
+    )
+
+    short_vwap = (
+        precio < vwap
+    )
+
+    short_ema = (
+        ema9 < ema21
+    )
+
+    short_rsi = (
+        rsi < 48
+    )
+
+    short_macd = (
+        macd_hist < 0
+    )
+
+    short_volume = (
+        volume > volume_sma20
+    )
+
+    short_adx = (
+        adx > config["adx_min"]
+    )
+
+    short_breakout = (
+        precio < lowest_5
+    )
+
+    # ========================================================
+    # DIAGNÓSTICO LONG
+    # ========================================================
+
+    print()
+    print("   🟢 CONDICIONES LONG")
+
+    mostrar_condicion(
+        "Macro 1h BULLISH",
+        long_macro
+    )
+
+    mostrar_condicion(
+        "Precio > EMA200",
+        long_ema200
+    )
+
+    mostrar_condicion(
+        "Precio > VWAP",
+        long_vwap
+    )
+
+    mostrar_condicion(
+        "EMA9 > EMA21",
+        long_ema
+    )
+
+    mostrar_condicion(
+        "RSI > 52",
+        long_rsi
+    )
+
+    mostrar_condicion(
+        "MACD Hist > 0",
+        long_macd
+    )
+
+    mostrar_condicion(
+        "Volumen > SMA20",
+        long_volume
+    )
+
+    mostrar_condicion(
+        f"ADX > {config['adx_min']}",
+        long_adx
+    )
+
+    mostrar_condicion(
+        "Precio > máximo 5 velas",
+        long_breakout
+    )
+
+    # ========================================================
+    # DIAGNÓSTICO SHORT
+    # ========================================================
+
+    print()
+    print("   🔴 CONDICIONES SHORT")
+
+    mostrar_condicion(
+        "Macro 1h BEARISH",
+        short_macro
+    )
+
+    mostrar_condicion(
+        "Precio < EMA200",
+        short_ema200
+    )
+
+    mostrar_condicion(
+        "Precio < VWAP",
+        short_vwap
+    )
+
+    mostrar_condicion(
+        "EMA9 < EMA21",
+        short_ema
+    )
+
+    mostrar_condicion(
+        "RSI < 48",
+        short_rsi
+    )
+
+    mostrar_condicion(
+        "MACD Hist < 0",
+        short_macd
+    )
+
+    mostrar_condicion(
+        "Volumen > SMA20",
+        short_volume
+    )
+
+    mostrar_condicion(
+        f"ADX > {config['adx_min']}",
+        short_adx
+    )
+
+    mostrar_condicion(
+        "Precio < mínimo 5 velas",
+        short_breakout
+    )
+
+    # ========================================================
+    # SEÑALES FINALES
+    # ========================================================
+
+    señal_long = all([
+        long_macro,
+        long_ema200,
+        long_vwap,
+        long_ema,
+        long_rsi,
+        long_macd,
+        long_volume,
+        long_adx,
+        long_breakout
+    ])
+
+    señal_short = all([
+        short_macro,
+        short_ema200,
+        short_vwap,
+        short_ema,
+        short_rsi,
+        short_macd,
+        short_volume,
+        short_adx,
+        short_breakout
+    ])
+
+    print()
+
+    if señal_long:
+
+        print(
+            "🚨🚨🚨 SEÑAL LONG DETECTADA 🚨🚨🚨"
+        )
+
+    elif señal_short:
+
+        print(
+            "🚨🚨🚨 SEÑAL SHORT DETECTADA 🚨🚨🚨"
+        )
+
+    else:
+
+        print(
+            "ℹ️ Sin confluencia suficiente."
+        )
 
 
 # ============================================================
-# 12. MAIN
+# MAIN
 # ============================================================
 
 def main():
 
-    _, hora_str, fecha_hora = (
+    hora, hora_minuto, fecha_hora = (
         obtener_hora_espana()
     )
 
+    print()
     print(
-        "\n"
-        "==========================================\n"
-        "🚀 CRYPTO COPILOT - MODELO PRO V1\n"
+        "🚀 CRYPTO COPILOT - MODELO PRO V1.1"
+    )
+    print(
         "=========================================="
     )
 
@@ -1186,30 +1043,44 @@ def main():
     )
 
     print(
-        "==========================================\n"
+        "=========================================="
     )
 
-    for symbol in CONFIG_ACTIVOS:
+    cooldowns = cargar_cooldowns_github()
+
+    for simbolo, config in CONFIG_ACTIVOS.items():
 
         try:
 
-            analizar_activo(symbol)
+            analizar_activo(
+                simbolo,
+                config,
+                cooldowns
+            )
 
         except Exception as e:
 
             print(
-                f"❌ Error inesperado analizando "
-                f"{symbol}: {e}"
+                f"❌ Error analizando "
+                f"{simbolo}: {e}"
             )
 
+        time.sleep(1)
+
+    print()
     print(
-        "\n✅ Escaneo finalizado.\n"
+        "=========================================="
+    )
+
+    print(
+        "✅ Escaneo finalizado."
     )
 
 
 # ============================================================
-# 13. EJECUCIÓN
+# EJECUCIÓN
 # ============================================================
 
 if __name__ == "__main__":
+
     main()
