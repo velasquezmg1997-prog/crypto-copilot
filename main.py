@@ -9,22 +9,10 @@ import ccxt
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from executor_binance import (
-    procesar_senal,
-    verificar_conexion_binance,
-    TRADING_ENABLED,
-)
-
-
 # ============================================================
-# CRYPTO COPILOT - V1.3
-# Scanner 15m + filtro macro 1h + Binance Futures Demo
-#
-# TRADING_ENABLED=false:
-#   analiza + Telegram + valida en Binance, SIN órdenes.
-#
-# TRADING_ENABLED=true:
-#   ejecuta directamente en Binance Futures Demo.
+# CRYPTO COPILOT - V1.3 SCANNER-ONLY
+# Scanner 15m + filtro macro 1h + envío de señales por Telegram.
+# La ejecución de órdenes se realiza EXCLUSIVAMENTE en el ejecutor local.
 # ============================================================
 
 
@@ -530,11 +518,7 @@ def construir_mensaje(
         emoji = "🔴"
         macro_texto = "Bajista 🔴"
 
-    modo = (
-        "DEMO AUTO"
-        if TRADING_ENABLED
-        else "DRY RUN"
-    )
+    modo = "EJECUCIÓN LOCAL"
 
     return (
         "```ORDER_SIGNAL\n"
@@ -547,7 +531,7 @@ def construir_mensaje(
         "END_SIGNAL```\n\n"
         f"🚨 *ALERTA PRO V1.3 ({tipo} {emoji}) - "
         f"{symbol_clean} {TIMEFRAME_OPERATIVO}*\n\n"
-        f"🛡 *Ejecutor Binance:* `{modo}`\n"
+        f"🛡 *Ejecución:* `{modo}`\n"
         f"📊 *Filtro Macro (1h):* {macro_texto}\n"
         f"🔥 *ADX:* `{adx:.1f}` | "
         f"*VWAP:* `${vwap:.8f}`\n\n"
@@ -559,40 +543,6 @@ def construir_mensaje(
         f"• *Take Profit 1:* `${take_profit1:.8f}`\n"
         f"• *Take Profit 2:* `${take_profit2:.8f}`"
     )
-
-
-def procesar_o_simular(
-    symbol,
-    tipo,
-    precio,
-    stop_loss,
-    take_profit1,
-    take_profit2,
-):
-    # El símbolo para Binance no lleva "/".
-    symbol_binance = symbol.replace("/", "")
-
-    result = procesar_senal(
-        simbolo=symbol_binance,
-        tipo_orden=tipo,
-        precio_entrada=precio,
-        stop_loss=stop_loss,
-        tp1=take_profit1,
-        tp2=take_profit2,
-    )
-
-    if result.get("ok"):
-        print(
-            f"✅ Ejecutor {result.get('mode')}: "
-            f"{result.get('message')}"
-        )
-    else:
-        print(
-            f"⚠ Ejecutor rechazó {symbol}: "
-            f"{result.get('message')}"
-        )
-
-    return result
 
 
 def analizar_activo(symbol):
@@ -744,18 +694,9 @@ def analizar_activo(symbol):
             config,
         )
 
-        # Solo permitimos llegar al ejecutor si Telegram aceptó
-        # la señal y el cooldown fue registrado.
-        if enviar_telegram(mensaje, symbol):
-            procesar_o_simular(
-                symbol,
-                "LONG",
-                precio,
-                stop_loss,
-                take_profit1,
-                take_profit2,
-            )
-
+        # Render SOLO publica la señal.
+        # El ejecutor local escucha este mensaje y opera Binance Testnet.
+        enviar_telegram(mensaje, symbol)
         return
 
     # SHORT
@@ -812,16 +753,9 @@ def analizar_activo(symbol):
             config,
         )
 
-        if enviar_telegram(mensaje, symbol):
-            procesar_o_simular(
-                symbol,
-                "SHORT",
-                precio,
-                stop_loss,
-                take_profit1,
-                take_profit2,
-            )
-
+        # Render SOLO publica la señal.
+        # El ejecutor local escucha este mensaje y opera Binance Testnet.
+        enviar_telegram(mensaje, symbol)
         return
 
     print(
@@ -847,20 +781,12 @@ def main():
         f"💾 Cooldown: "
         f"{COOLDOWN_SEGUNDOS // 60} minutos"
     )
-    print(
-        "🛡 Binance: "
-        + (
-            "DEMO AUTO — TRADING_ENABLED=true"
-            if TRADING_ENABLED
-            else "DRY RUN — TRADING_ENABLED=false"
-        )
-    )
+    print("🛡 Modo: SCANNER-ONLY — sin conexión a Binance en Render")
     print("=" * 64)
 
-    validar_configuracion()
-
-    # Esta prueba es solo lectura. En DRY RUN no crea ni cancela órdenes.
-    verificar_conexion_binance()
+    if not validar_configuracion():
+        print("❌ Configuración incompleta. Escaneo cancelado.")
+        return
 
     for symbol in CONFIG_ACTIVOS:
         try:
