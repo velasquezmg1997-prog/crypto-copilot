@@ -1,3 +1,4 @@
+```python
 import os
 import time
 import json
@@ -64,7 +65,7 @@ TIMEFRAME_MACRO = "1h"
 
 LIMIT = 300
 
-COOLDOWN_SEGUNDOS = 1800  # 30 minutos
+COOLDOWN_SEGUNDOS = 1800
 
 
 # ============================================================
@@ -99,10 +100,8 @@ def obtener_hora_espana():
         ZoneInfo("Europe/Madrid")
     )
 
-    return (
-        ahora.hour,
-        ahora.strftime("%H:%M"),
-        ahora.strftime("%d/%m/%Y %H:%M:%S")
+    return ahora.strftime(
+        "%d/%m/%Y %H:%M:%S"
     )
 
 
@@ -146,7 +145,6 @@ def cargar_cooldowns_github():
 
         elif response.status_code == 404:
 
-            print("ℹ️ cooldown.json no existe todavía.")
             return {}
 
         else:
@@ -189,7 +187,6 @@ def guardar_cooldowns_github(cooldowns):
 
     try:
 
-        # Obtener SHA actual
         response = requests.get(
             url,
             headers=headers,
@@ -199,6 +196,7 @@ def guardar_cooldowns_github(cooldowns):
         sha = None
 
         if response.status_code == 200:
+
             sha = response.json().get("sha")
 
         contenido = json.dumps(
@@ -317,8 +315,7 @@ def obtener_datos(simbolo, timeframe):
         if len(ohlcv) < 200:
 
             print(
-                f"⚠️ {simbolo}: "
-                f"Datos insuficientes."
+                f"⚠️ {simbolo}: Datos insuficientes."
             )
 
             return None
@@ -384,11 +381,9 @@ def calcular_vwap(df):
 
     volumen = df["volume"]
 
-    vwap = (
+    return (
         precio_tipico * volumen
     ).cumsum() / volumen.cumsum()
-
-    return vwap
 
 
 # ============================================================
@@ -458,8 +453,7 @@ def calcular_indicadores(df):
 
     # ATR
     high_low = (
-        df["high"]
-        - df["low"]
+        df["high"] - df["low"]
     )
 
     high_close = (
@@ -494,7 +488,7 @@ def calcular_indicadores(df):
     df["vwap"] = calcular_vwap(df)
 
     # ========================================================
-    # ADX CORREGIDO
+    # ADX
     # ========================================================
 
     up_move = df["high"].diff()
@@ -545,8 +539,7 @@ def calcular_indicadores(df):
     )
 
     denominator = (
-        plus_di
-        + minus_di
+        plus_di + minus_di
     )
 
     dx = (
@@ -597,7 +590,7 @@ def obtener_ultima_vela_cerrada(df):
 
 
 # ============================================================
-# FORMATEAR CONDICIÓN
+# CONDICIÓN
 # ============================================================
 
 def mostrar_condicion(nombre, valor):
@@ -606,6 +599,23 @@ def mostrar_condicion(nombre, valor):
         print(f"   ✅ {nombre}")
     else:
         print(f"   ❌ {nombre}")
+
+
+# ============================================================
+# CONTADOR
+# ============================================================
+
+def mostrar_resumen(direccion, condiciones):
+
+    total = len(condiciones)
+    cumplidas = sum(condiciones)
+
+    print(
+        f"   {direccion}: "
+        f"{cumplidas}/{total} condiciones"
+    )
+
+    return cumplidas
 
 
 # ============================================================
@@ -618,6 +628,7 @@ def analizar_activo(
     cooldowns
 ):
 
+    print()
     print("=" * 60)
     print(f"📊 {simbolo}")
 
@@ -668,10 +679,28 @@ def analizar_activo(
 
         print(
             f"❌ {simbolo}: "
-            f"No hay vela cerrada suficiente."
+            f"No hay velas suficientes."
         )
 
         return
+
+    # ========================================================
+    # HORA DE LA VELA
+    # ========================================================
+
+    hora_vela_15m = vela_15m["timestamp"]
+
+    hora_vela_1h = vela_1h["timestamp"]
+
+    print(
+        f"🕯️ Vela 15m analizada: "
+        f"{hora_vela_15m}"
+    )
+
+    print(
+        f"🕯️ Vela 1h analizada: "
+        f"{hora_vela_1h}"
+    )
 
     # ========================================================
     # VALORES
@@ -699,8 +728,8 @@ def analizar_activo(
     highest_5 = vela_15m["highest_5"]
     lowest_5 = vela_15m["lowest_5"]
 
-    ema200_1h = vela_1h["ema200"]
     close_1h = vela_1h["close"]
+    ema200_1h = vela_1h["ema200"]
 
     # ========================================================
     # MACRO
@@ -719,6 +748,10 @@ def analizar_activo(
         if macro_bullish
         else "BEARISH"
     )
+
+    # ========================================================
+    # INFORMACIÓN
+    # ========================================================
 
     print(
         f"   Cierre 15m: {precio:.6f}"
@@ -774,212 +807,180 @@ def analizar_activo(
     )
 
     # ========================================================
-    # CONDICIONES LONG
+    # LONG
     # ========================================================
 
-    long_macro = macro_bullish
-
-    long_ema200 = (
-        precio > ema200
-    )
-
-    long_vwap = (
-        precio > vwap
-    )
-
-    long_ema = (
-        ema9 > ema21
-    )
-
-    long_rsi = (
-        rsi > 52
-    )
-
-    long_macd = (
-        macd_hist > 0
-    )
-
-    long_volume = (
-        volume > volume_sma20
-    )
-
-    long_adx = (
-        adx > config["adx_min"]
-    )
-
-    long_breakout = (
+    long_conditions = [
+        macro_bullish,
+        precio > ema200,
+        precio > vwap,
+        ema9 > ema21,
+        rsi > 52,
+        macd_hist > 0,
+        volume > volume_sma20,
+        adx > config["adx_min"],
         precio > highest_5
-    )
+    ]
+
+    long_names = [
+        "Macro 1h BULLISH",
+        "Precio > EMA200",
+        "Precio > VWAP",
+        "EMA9 > EMA21",
+        "RSI > 52",
+        "MACD Hist > 0",
+        "Volumen > SMA20",
+        f"ADX > {config['adx_min']}",
+        "Precio > máximo 5 velas"
+    ]
 
     # ========================================================
-    # CONDICIONES SHORT
+    # SHORT
     # ========================================================
 
-    short_macro = macro_bearish
-
-    short_ema200 = (
-        precio < ema200
-    )
-
-    short_vwap = (
-        precio < vwap
-    )
-
-    short_ema = (
-        ema9 < ema21
-    )
-
-    short_rsi = (
-        rsi < 48
-    )
-
-    short_macd = (
-        macd_hist < 0
-    )
-
-    short_volume = (
-        volume > volume_sma20
-    )
-
-    short_adx = (
-        adx > config["adx_min"]
-    )
-
-    short_breakout = (
+    short_conditions = [
+        macro_bearish,
+        precio < ema200,
+        precio < vwap,
+        ema9 < ema21,
+        rsi < 48,
+        macd_hist < 0,
+        volume > volume_sma20,
+        adx > config["adx_min"],
         precio < lowest_5
-    )
+    ]
+
+    short_names = [
+        "Macro 1h BEARISH",
+        "Precio < EMA200",
+        "Precio < VWAP",
+        "EMA9 < EMA21",
+        "RSI < 48",
+        "MACD Hist < 0",
+        "Volumen > SMA20",
+        f"ADX > {config['adx_min']}",
+        "Precio < mínimo 5 velas"
+    ]
 
     # ========================================================
-    # DIAGNÓSTICO LONG
+    # MOSTRAR LONG
     # ========================================================
 
     print()
     print("   🟢 CONDICIONES LONG")
 
-    mostrar_condicion(
-        "Macro 1h BULLISH",
-        long_macro
-    )
+    for nombre, condicion in zip(
+        long_names,
+        long_conditions
+    ):
 
-    mostrar_condicion(
-        "Precio > EMA200",
-        long_ema200
-    )
+        mostrar_condicion(
+            nombre,
+            condicion
+        )
 
-    mostrar_condicion(
-        "Precio > VWAP",
-        long_vwap
-    )
-
-    mostrar_condicion(
-        "EMA9 > EMA21",
-        long_ema
-    )
-
-    mostrar_condicion(
-        "RSI > 52",
-        long_rsi
-    )
-
-    mostrar_condicion(
-        "MACD Hist > 0",
-        long_macd
-    )
-
-    mostrar_condicion(
-        "Volumen > SMA20",
-        long_volume
-    )
-
-    mostrar_condicion(
-        f"ADX > {config['adx_min']}",
-        long_adx
-    )
-
-    mostrar_condicion(
-        "Precio > máximo 5 velas",
-        long_breakout
+    long_count = mostrar_resumen(
+        "🟢 LONG",
+        long_conditions
     )
 
     # ========================================================
-    # DIAGNÓSTICO SHORT
+    # MOSTRAR SHORT
     # ========================================================
 
     print()
     print("   🔴 CONDICIONES SHORT")
 
-    mostrar_condicion(
-        "Macro 1h BEARISH",
-        short_macro
-    )
+    for nombre, condicion in zip(
+        short_names,
+        short_conditions
+    ):
 
-    mostrar_condicion(
-        "Precio < EMA200",
-        short_ema200
-    )
+        mostrar_condicion(
+            nombre,
+            condicion
+        )
 
-    mostrar_condicion(
-        "Precio < VWAP",
-        short_vwap
-    )
-
-    mostrar_condicion(
-        "EMA9 < EMA21",
-        short_ema
-    )
-
-    mostrar_condicion(
-        "RSI < 48",
-        short_rsi
-    )
-
-    mostrar_condicion(
-        "MACD Hist < 0",
-        short_macd
-    )
-
-    mostrar_condicion(
-        "Volumen > SMA20",
-        short_volume
-    )
-
-    mostrar_condicion(
-        f"ADX > {config['adx_min']}",
-        short_adx
-    )
-
-    mostrar_condicion(
-        "Precio < mínimo 5 velas",
-        short_breakout
+    short_count = mostrar_resumen(
+        "🔴 SHORT",
+        short_conditions
     )
 
     # ========================================================
-    # SEÑALES FINALES
+    # CONDICIONES FALTANTES
     # ========================================================
 
-    señal_long = all([
-        long_macro,
-        long_ema200,
-        long_vwap,
-        long_ema,
-        long_rsi,
-        long_macd,
-        long_volume,
-        long_adx,
-        long_breakout
-    ])
+    long_faltantes = [
+        nombre
+        for nombre, condicion
+        in zip(
+            long_names,
+            long_conditions
+        )
+        if not condicion
+    ]
 
-    señal_short = all([
-        short_macro,
-        short_ema200,
-        short_vwap,
-        short_ema,
-        short_rsi,
-        short_macd,
-        short_volume,
-        short_adx,
-        short_breakout
-    ])
+    short_faltantes = [
+        nombre
+        for nombre, condicion
+        in zip(
+            short_names,
+            short_conditions
+        )
+        if not condicion
+    ]
+
+    print()
+
+    if long_faltantes:
+
+        print(
+            "   🎯 Faltan para LONG:"
+        )
+
+        for condicion in long_faltantes:
+
+            print(
+                f"      ❌ {condicion}"
+            )
+
+    else:
+
+        print(
+            "   🚨 LONG COMPLETO"
+        )
+
+    print()
+
+    if short_faltantes:
+
+        print(
+            "   🎯 Faltan para SHORT:"
+        )
+
+        for condicion in short_faltantes:
+
+            print(
+                f"      ❌ {condicion}"
+            )
+
+    else:
+
+        print(
+            "   🚨 SHORT COMPLETO"
+        )
+
+    # ========================================================
+    # SEÑAL FINAL
+    # ========================================================
+
+    señal_long = all(
+        long_conditions
+    )
+
+    señal_short = all(
+        short_conditions
+    )
 
     print()
 
@@ -1008,14 +1009,13 @@ def analizar_activo(
 
 def main():
 
-    hora, hora_minuto, fecha_hora = (
-        obtener_hora_espana()
-    )
+    fecha_hora = obtener_hora_espana()
 
     print()
     print(
-        "🚀 CRYPTO COPILOT - MODELO PRO V1.1"
+        "🚀 CRYPTO COPILOT - MODELO PRO V1.2"
     )
+
     print(
         "=========================================="
     )
@@ -1084,3 +1084,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+```
